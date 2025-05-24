@@ -74,10 +74,19 @@ cd backend
 pip3 install -r requirements-minimal.txt
 ```
 
-Update `backend/run.py` with your API keys:
-```python
-os.environ["OPENAI_API_KEY"] = "your_openai_api_key"
-os.environ["PINECONE_API_KEY"] = "your_pinecone_api_key"
+Create environment file:
+```bash
+# Copy the example environment file
+cp env.example .env
+
+# Edit .env with your actual API keys
+# OPENAI_API_KEY=your_openai_api_key_here
+# (Add other required environment variables)
+```
+
+Or set environment variables directly:
+```bash
+export OPENAI_API_KEY="your_openai_api_key_here"
 ```
 
 Start backend:

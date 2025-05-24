@@ -5,16 +5,12 @@ Simple script to run the PixelateAI backend server.
 
 import os
 import sys
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Verify that the OpenAI API key is set
+# Check if OpenAI API key is set as environment variable
 if not os.getenv("OPENAI_API_KEY"):
     print("ERROR: OPENAI_API_KEY environment variable is not set!")
-    print("Please create a .env file in the backend directory with your OpenAI API key:")
-    print("OPENAI_API_KEY=your_api_key_here")
+    print("Please set it before running the server:")
+    print("export OPENAI_API_KEY='your-api-key-here'")
     sys.exit(1)
 
 # Add the app directory to the Python path
