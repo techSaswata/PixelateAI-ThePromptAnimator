@@ -41,7 +41,7 @@ def render_manim_video(code: str, job_id: str) -> str:
                 "python3", "-m", "manim",
                 str(code_file),
                 "Scene",  # Class name
-                "-qm",    # Medium quality
+                "-ql",    # Low quality for faster rendering on servers
                 "--format", "mp4",
                 "--output_file", f"{job_id}.mp4"
             ]
@@ -58,7 +58,7 @@ def render_manim_video(code: str, job_id: str) -> str:
                 cwd=temp_dir,
                 capture_output=True,
                 text=True,
-                timeout=60,  # 1 minute timeout
+                timeout=300,  # 5 minute timeout for better compatibility with Render
                 env=env
             )
             
@@ -67,7 +67,7 @@ def render_manim_video(code: str, job_id: str) -> str:
                 raise Exception(f"Video rendering failed: {result.stderr}")
             
             # Find the generated video file
-            media_dir = temp_path / "media" / "videos" / "animation" / "720p30"
+            media_dir = temp_path / "media" / "videos" / "animation" / "480p15"
             video_files = list(media_dir.glob("*.mp4"))
             
             if not video_files:
