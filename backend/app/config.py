@@ -1,9 +1,13 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env file from the backend directory specifically
+backend_dir = Path(__file__).parent.parent
+env_path = backend_dir / ".env"
+load_dotenv(dotenv_path=env_path)
 
 
 class Settings(BaseSettings):
