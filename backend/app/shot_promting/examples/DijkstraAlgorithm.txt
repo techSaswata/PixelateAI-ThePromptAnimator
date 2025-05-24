@@ -1,0 +1,285 @@
+USER: explain Dijkstra's Algorithm /
+ASSISTANT:
+Dijkstra’s Algorithm is used to find the shortest path between nodes in a graph. It works by iteratively choosing the node with the smallest known distance, updating distances to its neighbors, and repeating.
+
+``` python
+
+from manim import *
+import heapq
+
+class DijkstraAlgorithm(Scene):
+    def construct(self):
+        # Set up the scene layout
+        self.setup_layout()
+        self.create_graph()
+        self.create_code_section()
+        self.animate_dijkstra()
+
+    def setup_layout(self):
+        # Create invisible divider for layout
+        self.graph_area = Rectangle(width=7, height=8).shift(LEFT * 3.5)
+        self.code_area = Rectangle(width=7, height=8).shift(RIGHT * 3.5)
+        
+    def create_graph(self):
+        # Node positions to match the image layout
+        self.node_positions = {
+            0: LEFT * 5 + DOWN * 1,      # Source
+            1: LEFT * 3 + UP * 1.5,      # Node 1  
+            2: LEFT * 3 + DOWN * 2.5,    # Node 2
+            3: LEFT * 1 + DOWN * 2.5,    # Node 3
+            4: LEFT * 1 + UP * 1.5       # Node 4
+        }
+        
+        # Create nodes
+        self.nodes = {}
+        self.node_labels = {}
+        self.distance_labels = {}
+        
+        for i in range(5):
+            # Create node circle
+            node = Circle(radius=0.4, color=WHITE, fill_color=GREEN_A, fill_opacity=0.8)
+            node.move_to(self.node_positions[i])
+            
+            # Create node number label
+            label = Text(str(i), font_size=24, color=BLACK, weight=BOLD)
+            label.move_to(node.get_center())
+            
+            # Create distance label (initially infinity except source)
+            if i == 0:
+                dist_text = "0"
+                dist_label = Text(dist_text, font_size=20, color=BLACK, weight=BOLD)
+            else:
+                dist_text = "∞"
+                dist_label = Text(dist_text, font_size=20, color=BLACK, weight=BOLD)
+            
+            dist_label.next_to(node, UP, buff=0.1)
+            
+            self.nodes[i] = node
+            self.node_labels[i] = label
+            self.distance_labels[i] = dist_label
+            
+            self.add(node, label, dist_label)
+        
+        # Add source label
+        source_label = Text("Source", font_size=16, color=BLUE)
+        source_label.next_to(self.nodes[0], LEFT, buff=0.3)
+        self.add(source_label)
+        
+        # Create edges with weights
+        self.edges = {}
+        self.edge_labels = {}
+        edges_data = [(0, 1, 4), (0, 2, 8), (1, 4, 6), (2, 3, 2), (3, 4, 10)]
+        
+        for u, v, weight in edges_data:
+            # Create edge line
+            edge = Line(self.node_positions[u], self.node_positions[v], color=WHITE, stroke_width=3)
+            
+            # Create weight label
+            weight_label = Text(str(weight), font_size=18, color=WHITE, weight=BOLD)
+            weight_label.move_to(edge.get_center())
+            weight_label.add_background_rectangle(color=BLACK, opacity=0.7, buff=0.1)
+            
+            self.edges[(u, v)] = edge
+            self.edge_labels[(u, v)] = weight_label
+            
+            self.add(edge, weight_label)
+
+    def create_code_section(self):
+        # Title
+        title = Text("Dijkstra Algorithm", font_size=28, color=YELLOW, weight=BOLD)
+        title.move_to(RIGHT * 3.5 + UP * 3.5)
+        self.add(title)
+        
+        # Distance array visualization
+        self.dist_array_title = Text("dist[] =", font_size=20, color=WHITE)
+        self.dist_array_title.move_to(RIGHT * 1.5 + UP * 2.5)
+        
+        # Create distance array boxes
+        self.dist_boxes = []
+        self.dist_values = []
+        self.dist_indices = []
+        
+        for i in range(5):
+            # Create box
+            box = Rectangle(width=0.6, height=0.4, color=WHITE)
+            box.move_to(RIGHT * (2.5 + i * 0.7) + UP * 2.5)
+            
+            # Initial value
+            if i == 0:
+                value = Text("0", font_size=16, color=BLACK, weight=BOLD)
+                box.set_fill(GREEN_A, opacity=0.8)
+            else:
+                value = Text("∞", font_size=16, color=BLACK, weight=BOLD)
+                box.set_fill(WHITE, opacity=0.8)
+            value.move_to(box.get_center())
+            
+            # Index label
+            index = Text(str(i), font_size=14, color=WHITE)
+            index.next_to(box, DOWN, buff=0.1)
+            
+            self.dist_boxes.append(box)
+            self.dist_values.append(value)
+            self.dist_indices.append(index)
+            
+            self.add(box, value, index)
+        
+        self.add(self.dist_array_title)
+        
+        # Priority queue visualization
+        self.pq_title = Text("pq", font_size=20, color=WHITE)
+        self.pq_title.move_to(RIGHT * 4.5 + UP * 1.5)
+        self.add(self.pq_title)
+        
+        # PQ container
+        self.pq_container = Rectangle(width=2, height=2, color=WHITE)
+        self.pq_container.move_to(RIGHT * 4.5 + UP * 0.3)
+        self.add(self.pq_container)
+        
+        self.pq_items = VGroup()
+        
+        # Step indicator
+        self.step_text = Text("Step 01", font_size=24, color=GREEN, weight=BOLD)
+        self.step_text.move_to(RIGHT * 1.5 + DOWN * 1)
+        self.add(self.step_text)
+        
+        # Description text
+        self.description = Text("", font_size=14, color=WHITE)
+        self.description.move_to(RIGHT * 3.5 + DOWN * 1.8)
+        self.add(self.description)
+
+    def animate_dijkstra(self):
+        # Step 1: Initialize
+        self.update_step(1, "Initialize distances and push source to heap")
+        self.add_to_pq("{0, 0}")
+        self.wait(2)
+        
+        # Dijkstra's algorithm simulation
+        edges_data = [(0, 1, 4), (0, 2, 8), (1, 4, 6), (2, 3, 2), (3, 4, 10)]
+        
+        # Build adjacency list
+        adj = {i: [] for i in range(5)}
+        for u, v, w in edges_data:
+            adj[u].append((v, w))
+            adj[v].append((u, w))
+        
+        # Algorithm state
+        dist = [float('inf')] * 5
+        dist[0] = 0
+        pq = [(0, 0)]
+        processed = set()
+        
+        step_count = 2
+        
+        while pq:
+            # Pop minimum
+            d, u = heapq.heappop(pq)
+            
+            if u in processed:
+                continue
+                
+            processed.add(u)
+            
+            # Highlight current node
+            self.play(
+                self.nodes[u].animate.set_fill(GREEN_B, opacity=1),
+                run_time=0.5
+            )
+            
+            self.update_step(step_count, f"Pop {{distance: {d}, node: {u}}} from heap")
+            self.remove_from_pq()
+            
+            # Process neighbors
+            neighbors_to_update = []
+            for v, weight in adj[u]:
+                if v not in processed and dist[u] + weight < dist[v]:
+                    dist[v] = dist[u] + weight
+                    heapq.heappush(pq, (dist[v], v))
+                    neighbors_to_update.append((v, dist[v]))
+            
+            # Animate edge highlighting and distance updates
+            for v, new_dist in neighbors_to_update:
+                # Highlight edge
+                edge_key = (min(u, v), max(u, v))
+                if edge_key in self.edges:
+                    edge = self.edges[edge_key]
+                else:
+                    edge_key = (max(u, v), min(u, v))
+                    edge = self.edges[edge_key]
+                
+                self.play(edge.animate.set_color(YELLOW), run_time=0.3)
+                
+                # Update distance
+                self.update_distance(v, new_dist)
+                self.add_to_pq(f"{{{new_dist}, {v}}}")
+                
+                self.play(edge.animate.set_color(WHITE), run_time=0.3)
+            
+            step_count += 1
+            self.wait(1)
+        
+        # Final step
+        self.update_step(step_count, "Algorithm complete! All shortest distances found.")
+        self.highlight_all_processed()
+        self.wait(3)
+
+    def update_step(self, step_num, description):
+        new_step = Text(f"Step {step_num:02d}", font_size=24, color=GREEN, weight=BOLD)
+        new_step.move_to(self.step_text.get_center())
+        
+        new_desc = Text(description, font_size=14, color=WHITE)
+        new_desc.move_to(RIGHT * 3.5 + DOWN * 1.8)
+        
+        self.play(
+            Transform(self.step_text, new_step),
+            Transform(self.description, new_desc),
+            run_time=0.5
+        )
+
+    def update_distance(self, node, new_dist):
+        # Update distance label above node
+        new_label = Text(str(new_dist), font_size=20, color=BLACK, weight=BOLD)
+        new_label.move_to(self.distance_labels[node].get_center())
+        
+        # Update distance array
+        new_value = Text(str(new_dist), font_size=16, color=BLACK, weight=BOLD)
+        new_value.move_to(self.dist_values[node].get_center())
+        
+        self.play(
+            Transform(self.distance_labels[node], new_label),
+            Transform(self.dist_values[node], new_value),
+            self.dist_boxes[node].animate.set_fill(GREEN_A, opacity=0.8),
+            run_time=0.5
+        )
+
+    def add_to_pq(self, item_text):
+        item = Text(item_text, font_size=12, color=BLACK, weight=BOLD)
+        item.add_background_rectangle(color=GREEN_A, opacity=0.8, buff=0.05)
+        
+        # Position in priority queue
+        num_items = len(self.pq_items)
+        item.move_to(RIGHT * 4.5 + UP * (1.2 - num_items * 0.3))
+        
+        self.pq_items.add(item)
+        self.play(FadeIn(item), run_time=0.3)
+
+    def remove_from_pq(self):
+        if len(self.pq_items) > 0:
+            item_to_remove = self.pq_items[0]
+            self.play(FadeOut(item_to_remove), run_time=0.3)
+            self.pq_items.remove(item_to_remove)
+            
+            # Shift remaining items up
+            for i, item in enumerate(self.pq_items):
+                new_pos = RIGHT * 4.5 + UP * (1.2 - i * 0.3)
+                self.play(item.animate.move_to(new_pos), run_time=0.2)
+
+    def highlight_all_processed(self):
+        animations = []
+        for i in range(5):
+            animations.append(self.nodes[i].animate.set_fill(GREEN_B, opacity=1))
+        
+        self.play(*animations, run_time=1)
+
+# To render the animation, use:
+# manim -pql dijkstra_animation.py DijkstraAlgorithm
+```
