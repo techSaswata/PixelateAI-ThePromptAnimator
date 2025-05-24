@@ -292,4 +292,61 @@ def get_all_videos_from_pinecone(limit: int = 50) -> list:
     except Exception as e:
         logger.error(f"Error fetching all videos from Pinecone: {str(e)}")
         # Fallback to similarity search with broad query
-        return search_videos_in_pinecone("video animation", limit=limit) 
+        return search_videos_in_pinecone("video animation", limit=limit)
+
+
+def upload_video_to_supabase(video_path: str, job_id: str) -> Optional[str]:
+    """
+    Upload video file to Supabase Storage.
+    
+    Args:
+        video_path: Local path to the video file
+        job_id: Unique identifier for the video
+        
+    Returns:
+        Public URL to the uploaded video, or None if failed
+    """
+    try:
+        if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
+            logger.warning("Supabase not configured. Cannot upload video to cloud storage.")
+            return None
+            
+        from supabase import create_client
+        
+        # Initialize Supabase client
+        supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+        
+        # Read video file
+        video_file = Path(video_path)
+        if not video_file.exists():
+            logger.error(f"Video file not found: {video_path}")
+            return None
+            
+        with open(video_file, 'rb') as f:
+            video_data = f.read()
+        
+        # Upload to Supabase Storage
+        bucket_name = settings.SUPABASE_BUCKET or "videos"
+        file_name = f"{job_id}.mp4"
+        
+        logger.info(f"Uploading video {job_id} to Supabase Storage...")
+        
+        response = supabase.storage.from_(bucket_name).upload(
+            path=file_name,
+            file=video_data,
+            file_options={"content-type": "video/mp4"}
+        )
+        
+        if response.error:
+            logger.error(f"Failed to upload video to Supabase: {response.error}")
+            return None
+        
+        # Get public URL
+        public_url = supabase.storage.from_(bucket_name).get_public_url(file_name)
+        
+        logger.info(f"✅ Video {job_id} uploaded to Supabase Storage: {public_url}")
+        return public_url
+        
+    except Exception as e:
+        logger.error(f"Error uploading video {job_id} to Supabase: {str(e)}")
+        return None 

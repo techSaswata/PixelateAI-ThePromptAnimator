@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse, Response
 from .schemas import GenerateRequest
 from .generator import generate_manim_code, generate_manim_code_with_shots, generate_manim_code_smart
 from .config import settings
-from .video_storage import save_video_to_pinecone, search_videos_in_pinecone, get_all_videos_from_pinecone
+from .video_storage import save_video_to_pinecone, search_videos_in_pinecone, get_all_videos_from_pinecone, upload_video_to_supabase
 import uuid
 import logging
 import os
@@ -108,7 +108,17 @@ def simple_generate(req: GenerateRequest):
         # Render video server-side
         try:
             video_path = render_manim_video(manim_code, job_id)
-            video_url = f"/api/videos/{job_id}.mp4"
+            
+            # Try to upload to Supabase Storage for deployment access
+            cloud_video_url = upload_video_to_supabase(video_path, job_id)
+            
+            if cloud_video_url:
+                video_url = cloud_video_url  # Use cloud URL
+                logger.info(f"✅ Video {job_id} uploaded to cloud storage: {cloud_video_url}")
+            else:
+                video_url = f"/api/videos/{job_id}.mp4"  # Fallback to local URL
+                logger.warning(f"⚠️ Using local video URL for {job_id} (cloud upload failed)")
+            
             video_status = "✅ Video rendered successfully"
             video_available = True
             
