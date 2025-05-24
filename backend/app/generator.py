@@ -159,49 +159,27 @@ def comprehensive_code_cleaning(raw_code: str) -> str:
     # Pass 3: Remove any standalone ``` that might remain
     code = re.sub(r'```', '', code)
     
-    # Pass 4: Remove explanatory text that got mixed in
-    # Split by lines and only keep valid Python lines
+    # Pass 4: Clean up lines that might contain explanatory text
     lines = code.split('\n')
-    python_lines = []
-    in_python_block = False
+    cleaned_lines = []
     
     for line in lines:
         stripped = line.strip()
-        
-        # Start Python block detection
-        if not in_python_block and (stripped.startswith(('from ', 'import ', 'class ')) or 'def ' in stripped):
-            in_python_block = True
-        
-        # Skip obvious explanatory text
+        # Skip lines that are clearly explanatory text
         if any(phrase in stripped.lower() for phrase in [
             'this code will', 'the above code', 'to run this', 'save this as',
             'this creates', 'this demonstrates', 'note that', 'remember to',
-            'make sure to', 'you can run', 'this will create', 'this script',
-            'the script', 'this animation', 'this program', 'finally', 'after that',
-            'it starts by', 'then it', 'next', 'lastly', 'here is', 'here\'s'
+            'make sure to', 'you can run', 'this will create'
         ]):
             continue
-        
-        # Skip lines that start with markdown indicators or explanations
-        if stripped.startswith(('# To ', '# Save ', '# Run ', '# This ', '# Here')):
+            
+        # Skip lines that start with markdown indicators
+        if stripped.startswith(('# To ', '# Save ', '# Run ', '# This ')):
             continue
-        
-        # Skip lines that are clearly not Python (no Python syntax)
-        if in_python_block and stripped and not (
-            stripped.startswith(('#', 'from ', 'import ', 'class ', 'def ', '    ', '\t')) or
-            any(char in stripped for char in ['=', '(', ')', '{', '}', '[', ']', ':', ';']) or
-            any(keyword in stripped for keyword in ['self.', 'Scene', 'Text', 'Circle', 'Square', 'play', 'wait', 
-                                                   'Create', 'Write', 'FadeIn', 'FadeOut', 'MathTex', 'Line', 'Polygon',
-                                                   'return', 'if ', 'else:', 'elif ', 'for ', 'while ', 'try:', 'except']) or
-            stripped.startswith(('"""', "'''", '"', "'"))  # Allow string literals
-        ):
-            # This line doesn't look like Python code - skip it
-            continue
-        
-        if in_python_block:
-            python_lines.append(line)
+            
+        cleaned_lines.append(line)
     
-    code = '\n'.join(python_lines)
+    code = '\n'.join(cleaned_lines)
     
     # Pass 5: Final validation - ensure no ``` remain
     if '```' in code:
@@ -440,13 +418,6 @@ def generate_manim_code(prompt: str) -> str:
     - Use these reliable animations: Create(), Write(), FadeIn(), FadeOut(), Transform()
     - Keep it simple and working
     
-    CRITICAL MODERN MANIM API:
-    - Use Create() instead of ShowCreation()
-    - Use FadeIn() instead of FadeInFromDown()
-    - Use FadeOut() instead of FadeOutAndShiftDown()
-    - Use Transform() instead of ReplacementTransform()
-    - NO MovingCameraScene - use Scene only
-    
     CRITICAL SYNTAX RULES:
     - For animating mobject transformations, ALWAYS use the .animate property
     - CORRECT: self.play(circle.animate.set_color(RED))
@@ -484,9 +455,8 @@ def generate_manim_code(prompt: str) -> str:
     
     Use only basic shapes and Text objects. Make it educational and visually clear.
     Remember to use the .animate property for transformations.
-    Use modern Manim API: Create(), FadeIn(), FadeOut(), Transform().
     
-    Return ONLY Python code with NO explanations or text outside the code."""
+    Return ONLY Python code."""
     
     try:
         response = llm.invoke([
@@ -496,15 +466,7 @@ def generate_manim_code(prompt: str) -> str:
         
         logger.info(f"Raw OpenAI response: {response.content[:500]}...")  # Log first 500 chars
         
-        # Apply comprehensive cleaning and validation
-        code = comprehensive_code_cleaning(response.content)
-        code = fix_manim_syntax(code)
-        code = validate_and_fix_manim_code(code)
-        
-        # Final safety check - force remove any remaining deprecated APIs
-        if 'ShowCreation' in code:
-            code = code.replace('ShowCreation', 'Create')
-            logger.warning("Had to force-replace ShowCreation in basic code generation")
+        code = clean_python_code(response.content)
         
         logger.info(f"Cleaned code length: {len(code)} characters")
         logger.info(f"Cleaned code preview: {code[:200]}...")
@@ -1456,13 +1418,6 @@ def generate_enhanced_simple_code(prompt: str) -> str:
     
     enhanced_system_prompt = f"""You are an expert Manim code generator. Generate a comprehensive animation for: {sanitized_prompt}
 
-CRITICAL MODERN MANIM API REQUIREMENTS:
-- Use Create() instead of ShowCreation()
-- Use FadeIn() instead of FadeInFromDown()  
-- Use FadeOut() instead of FadeOutAndShiftDown()
-- Use Transform() instead of ReplacementTransform()
-- Class name must be 'Scene' (not MovingCameraScene)
-
 REQUIREMENTS:
 1. Create a 20+ second animation with proper pacing
 2. Use multiple animation stages with self.wait() statements
@@ -1472,23 +1427,15 @@ REQUIREMENTS:
 6. Use MathTex for any mathematical expressions
 7. Include smooth transitions and proper timing
 
-Generate COMPLETE, WORKING Python code only - NO explanations or text outside code:"""
+Generate COMPLETE, WORKING Python code only:"""
     
     try:
         response = llm.invoke([
             {"role": "system", "content": enhanced_system_prompt}
         ])
         
-        # Apply comprehensive cleaning and validation
-        code = comprehensive_code_cleaning(response.content)
-        code = fix_manim_syntax(code)
-        code = validate_and_fix_manim_code(code)
+        code = clean_python_code(response.content)
         code = ensure_comprehensive_structure(code)
-        
-        # Final safety check - force remove any remaining deprecated APIs
-        if 'ShowCreation' in code:
-            code = code.replace('ShowCreation', 'Create')
-            logger.warning("Had to force-replace ShowCreation in enhanced simple code")
         
         return code
         
