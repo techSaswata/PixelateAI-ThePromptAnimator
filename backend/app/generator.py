@@ -88,6 +88,20 @@ def extract_python_code(text: str) -> str:
 
 def fix_manim_syntax(code: str) -> str:
     """Fix old Manim syntax to new syntax."""
+    
+    # Fix deprecated API calls first
+    api_replacements = {
+        'ShowCreation': 'Create',
+        'FadeInFromDown': 'FadeIn',
+        'FadeOutAndShiftDown': 'FadeOut', 
+        'ShowIncreasingSubsets': 'Create',
+        'ShowSubmobjectsOneByOne': 'Create',
+        'DrawBorderThenFill': 'Create'
+    }
+    
+    for deprecated_api, modern_api in api_replacements.items():
+        code = code.replace(deprecated_api, modern_api)
+    
     # Pattern to match old syntax: self.play(mobject.method, args)
     # and convert to new syntax: self.play(mobject.animate.method(args))
     
@@ -1436,6 +1450,26 @@ def validate_and_fix_manim_code(code: str) -> str:
     # Ensure all required imports are present
     if "from manim import *" not in code:
         code = "from manim import *\n" + code
+    
+    # Fix deprecated Manim API calls to modern equivalents
+    api_replacements = {
+        'ShowCreation': 'Create',
+        'FadeInFromDown': 'FadeIn',
+        'FadeOutAndShiftDown': 'FadeOut', 
+        'ReplacementTransform': 'Transform',
+        'ShowIncreasingSubsets': 'Create',
+        'ShowSubmobjectsOneByOne': 'Create',
+        'DrawBorderThenFill': 'Create',
+        'Write': 'Write',  # Write is still valid
+        'GrowFromCenter': 'GrowFromCenter',  # Still valid
+        'FadeInFromLarge': 'FadeIn',
+        'FadeOutToPoint': 'FadeOut'
+    }
+    
+    for deprecated_api, modern_api in api_replacements.items():
+        if deprecated_api in code:
+            code = code.replace(deprecated_api, modern_api)
+            logger.info(f"Updated deprecated API {deprecated_api} to {modern_api}")
     
     # Fix unsupported color constants with available alternatives
     color_replacements = {
