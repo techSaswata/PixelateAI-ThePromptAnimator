@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse, Response
 from .schemas import GenerateRequest
 from .generator import generate_manim_code, generate_manim_code_with_shots, generate_manim_code_smart
 from .config import settings
-from .video_storage import save_video_to_pinecone, search_videos_in_pinecone, get_all_videos_from_pinecone, upload_video_to_supabase
+from .video_storage import save_video_to_pinecone, search_videos_in_pinecone, get_all_videos_from_pinecone, upload_video_to_supabase, get_all_videos_combined
 import uuid
 import logging
 import os
@@ -107,9 +107,12 @@ def simple_generate(req: GenerateRequest):
         
         # Render video server-side
         try:
+            logger.info(f"Starting video rendering for job {job_id}...")
             video_path = render_manim_video(manim_code, job_id)
+            logger.info(f"Video rendering completed for job {job_id}: {video_path}")
             
             # Try to upload to Supabase Storage for deployment access
+            logger.info(f"Starting Supabase upload for job {job_id}...")
             cloud_video_url = upload_video_to_supabase(video_path, job_id)
             
             if cloud_video_url:
@@ -124,7 +127,7 @@ def simple_generate(req: GenerateRequest):
             
             # Save video metadata to Pinecone
             try:
-                logger.info(f"Saving video {job_id} to Pinecone...")
+                logger.info(f"Starting Pinecone save for job {job_id}...")
                 pinecone_success = save_video_to_pinecone(
                     job_id=job_id,
                     prompt=req.prompt,
@@ -143,11 +146,12 @@ def simple_generate(req: GenerateRequest):
                     logger.warning(f"⚠️ Failed to save video {job_id} to Pinecone")
                     
             except Exception as pinecone_error:
-                logger.error(f"Error saving to Pinecone: {str(pinecone_error)}")
+                logger.error(f"❌ Error saving to Pinecone for job {job_id}: {str(pinecone_error)}")
                 # Don't fail the entire request if Pinecone fails
                 
         except Exception as video_error:
-            logger.error(f"Video rendering failed: {str(video_error)}")
+            logger.error(f"❌ Video rendering failed for job {job_id}: {str(video_error)}")
+            logger.error(f"❌ Video error details: {type(video_error).__name__}: {str(video_error)}")
             video_url = None
             video_status = f"❌ Video rendering failed: {str(video_error)}"
             video_available = False
@@ -323,6 +327,17 @@ def get_video_thumbnail(job_id: str):
         return get_placeholder_thumbnail()
 
 
+@router.get("/debug/supabase")
+def debug_supabase():
+    """Debug endpoint to check Supabase configuration."""
+    return {
+        "supabase_url": settings.SUPABASE_URL,
+        "supabase_key_configured": bool(settings.SUPABASE_KEY),
+        "supabase_bucket": settings.SUPABASE_BUCKET,
+        "all_configured": bool(settings.SUPABASE_URL and settings.SUPABASE_KEY)
+    }
+
+
 @router.get("/health")
 def health_check():
     """Health check endpoint."""
@@ -341,27 +356,38 @@ def get_placeholder_thumbnail():
 
 @router.get("/gallery/videos")
 async def get_gallery_videos():
-    """Get all videos stored in Pinecone for gallery display"""
+    """Get all videos from Supabase Storage and Pinecone for gallery display"""
     try:
-        # Get all videos from Pinecone
-        videos = get_all_videos_from_pinecone(limit=50)
+        # Get all videos from both Supabase Storage (primary) and Pinecone (metadata enrichment)
+        videos = get_all_videos_combined(limit=50)
         
         # Format videos for gallery display
         formatted_videos = []
         for video in videos:
+            # Prioritize Supabase URLs for remote access compatibility
+            video_url = video.get("video_url", "")
+            
+            # Skip videos without proper URLs for remote access
+            if not video_url or not video_url.startswith("http"):
+                # For remote access (ngrok), skip videos that only have local URLs
+                # Only include videos with full Supabase URLs
+                logger.debug(f"Skipping video {video.get('job_id')} - no cloud URL available")
+                continue
+            
             formatted_video = {
                 "id": video.get("job_id", "unknown"),
                 "title": extract_title_from_prompt(video.get("prompt", "Untitled Video")),
                 "description": video.get("prompt", "No description available"),
-                "video_url": video.get("video_url", ""),
+                "video_url": video_url,  # Use full Supabase URL
                 "creation_time": video.get("creation_time", ""),
                 "category": "mathematics",  # Default category, could be enhanced with AI classification
                 "duration": "Unknown",  # Could be enhanced by reading video metadata
-                "thumbnail": f"/api/videos/{video.get('job_id', 'unknown')}.mp4"  # Use video as thumbnail for now
+                "thumbnail": f"/api/videos/{video.get('job_id', 'unknown')}/thumbnail.jpg",
+                "source": video.get("source", "unknown")
             }
             formatted_videos.append(formatted_video)
         
-        logger.info(f"Retrieved {len(formatted_videos)} videos from Pinecone for gallery")
+        logger.info(f"Retrieved {len(formatted_videos)} videos for gallery (cloud URLs only)")
         
         return {
             "success": True,
