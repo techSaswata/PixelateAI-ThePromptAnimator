@@ -47,6 +47,20 @@ export default function CreatePage() {
   const [video, setVideo] = useState<Video | null>(null);
   const [generatedCode, setGeneratedCode] = useState<string>('');
 
+  // Backend URL with fallback
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
+  
+  console.log('Create page initialized with backend URL:', backendUrl);
+
+  // Helper function to get the correct video URL
+  const getVideoUrl = (url: string | null) => {
+    if (!url) return '';
+    // If URL already starts with http, use it as-is (Supabase direct URL)
+    if (url.startsWith('http')) return url;
+    // Otherwise, prepend backend URL
+    return `${backendUrl}${url}`;
+  };
+
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!loading && !user) {
@@ -174,18 +188,20 @@ export default function CreatePage() {
                           className="w-full max-w-2xl mx-auto"
                           poster={video.thumbnail || undefined}
                         >
-                          <source src={`http://localhost:5001${video.url}`} type="video/mp4" />
+                          <source src={getVideoUrl(video.url)} type="video/mp4" />
                           Your browser does not support the video tag.
                         </video>
                       </div>
                       <div className="flex gap-2 justify-center">
-                        <a
-                          href={`http://localhost:5001${video.url}`}
-                          download
-                          className="bg-green-600 text-white px-4 py-2 rounded-md text-sm hover:bg-green-700"
-                        >
-                          📥 Download Video
-                        </a>
+                        {getVideoUrl(video.url) && (
+                          <a
+                            href={getVideoUrl(video.url)}
+                            download
+                            className="bg-green-600 text-white px-4 py-2 rounded-md text-sm hover:bg-green-700"
+                          >
+                            📥 Download Video
+                          </a>
+                        )}
                         <button
                           onClick={() => {
                             const video = document.querySelector('video');
@@ -299,13 +315,13 @@ export default function CreatePage() {
                           </div>
                         )}
                         <div className="mt-2">
-                          {clip.video_url ? (
+                          {clip.video_url && getVideoUrl(clip.video_url) ? (
                             <video 
                               controls 
                               className="w-full h-32 rounded-md object-cover"
                               poster={clip.thumbnail}
                             >
-                              <source src={`http://localhost:5001${clip.video_url}`} type="video/mp4" />
+                              <source src={getVideoUrl(clip.video_url)} type="video/mp4" />
                             </video>
                           ) : (
                             <div className="bg-gray-200 h-32 rounded-md flex items-center justify-center">
