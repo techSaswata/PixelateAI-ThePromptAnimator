@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Timeline } from '../../components/timeline/Timeline';
 import { VideoPreview } from '../../components/preview/VideoPreview';
@@ -129,10 +129,17 @@ interface AudioClip {
   endTime: number;
 }
 
-export default function EditorPage() {
+// Component to handle search params
+function EditorWithSearchParams() {
   const searchParams = useSearchParams();
   const promptParam = searchParams ? searchParams.get('prompt') || '' : '';
   const projectIdParam = searchParams ? searchParams.get('projectId') : null;
+  
+  return <EditorPageContent promptParam={promptParam} projectIdParam={projectIdParam} />;
+}
+
+// Main editor component
+function EditorPageContent({ promptParam, projectIdParam }: { promptParam: string; projectIdParam: string | null }) {
   const [prompt, setPrompt] = useState(promptParam);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -1587,3 +1594,24 @@ export default function EditorPage() {
     </div>
   );
 } 
+
+// Loading component for Suspense fallback
+function EditorLoading() {
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-16 h-16 border-t-4 border-purple-500 border-solid rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-white/70">Loading Editor...</p>
+      </div>
+    </div>
+  );
+}
+
+// Main export with Suspense boundary
+export default function EditorPage() {
+  return (
+    <Suspense fallback={<EditorLoading />}>
+      <EditorWithSearchParams />
+    </Suspense>
+  );
+}
