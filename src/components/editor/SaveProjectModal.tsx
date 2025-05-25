@@ -65,8 +65,9 @@ export const SaveProjectModal: React.FC<SaveProjectModalProps> = ({
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-black"
             placeholder="Enter a title for your project"
+            style={{ color: '#000000' }}
             disabled={isSaving}
           />
         </div>
@@ -78,8 +79,9 @@ export const SaveProjectModal: React.FC<SaveProjectModalProps> = ({
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 h-24"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 h-24 text-black"
             placeholder="Enter a description for your project"
+            style={{ color: '#000000' }}
             disabled={isSaving}
           />
         </div>

@@ -41,6 +41,12 @@ export default function Navbar() {
             >
               Gallery
             </Link>
+            <Link
+              href="/projects"
+              className="text-lg font-bold tracking-wide text-white/70 hover:text-transparent hover:bg-clip-text hover:bg-gradient-to-r hover:from-purple-500 hover:to-blue-500 transition-all transform hover:scale-105"
+            >
+              Projects
+            </Link>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -48,7 +54,8 @@ export default function Navbar() {
             <input
               type="text"
               placeholder="Search animations..."
-              className="w-64 px-3 py-1.5 bg-[#111] border border-[#333] rounded-lg text-sm text-white/70 focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+              className="w-64 px-3 py-1.5 bg-[#111] border border-[#333] rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent placeholder:text-white/40"
+              style={{ color: '#ffffff' }}
             />
             <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-white/40 border border-[#333] rounded px-1.5 py-0.5">
               /

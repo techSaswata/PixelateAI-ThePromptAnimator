@@ -32,7 +32,7 @@ const ExportModal = ({
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
       <div className="bg-[#111] border border-[#222] rounded-lg p-6 w-full max-w-md">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-white">Export Animation</h2>
+          <h2 className="text-xl font-semibold text-white">Export Video</h2>
           <button 
             onClick={onClose}
             className="text-white/50 hover:text-white/70 transition-colors"
@@ -53,10 +53,9 @@ const ExportModal = ({
             className="w-full bg-[#222] border border-[#333] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             disabled={isExporting}
           >
-            <option value="mp4">MP4 Video</option>
-            <option value="gif">GIF Animation</option>
+            <option value="mp4">MP4 Video (Recommended)</option>
             <option value="webm">WebM Video</option>
-            <option value="png">PNG Image Sequence</option>
+            <option value="gif">GIF Animation (Coming Soon)</option>
           </select>
         </div>
         
@@ -70,11 +69,19 @@ const ExportModal = ({
             className="w-full bg-[#222] border border-[#333] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             disabled={isExporting}
           >
-            <option value="high">High (1080p)</option>
-            <option value="medium">Medium (720p)</option>
-            <option value="low">Low (480p)</option>
+            <option value="high">High Quality (1080p)</option>
+            <option value="medium">Medium Quality (720p)</option>
+            <option value="low">Low Quality (480p)</option>
           </select>
         </div>
+
+        {selectedFormat === 'gif' && (
+          <div className="mb-4 p-3 bg-yellow-600/20 border border-yellow-600/30 rounded-lg">
+            <p className="text-yellow-400 text-sm">
+              ⚠️ GIF export is coming soon. Please use MP4 or WebM for now.
+            </p>
+          </div>
+        )}
         
         <div className="flex justify-end space-x-3">
           <button
@@ -87,7 +94,7 @@ const ExportModal = ({
           <button
             onClick={handleExport}
             className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-500 text-white rounded-lg hover:opacity-90 transition-opacity flex items-center disabled:opacity-50"
-            disabled={isExporting}
+            disabled={isExporting || selectedFormat === 'gif'}
           >
             {isExporting ? (
               <>
@@ -98,7 +105,12 @@ const ExportModal = ({
                 Exporting...
               </>
             ) : (
-              'Export'
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export Video
+              </>
             )}
           </button>
         </div>
@@ -129,6 +141,16 @@ interface AudioClip {
   endTime: number;
 }
 
+// Add after AudioClip interface
+type TextOverlay = {
+  id: string;
+  text: string;
+  startTime: number;
+  endTime: number;
+  position: 'top' | 'center' | 'bottom';
+  fontSize: number;
+};
+
 // Component to handle search params
 function EditorWithSearchParams() {
   const searchParams = useSearchParams();
@@ -155,6 +177,9 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
   const [projectDescription, setProjectDescription] = useState('');
   const [projectId, setProjectId] = useState<string | null>(projectIdParam);
   const [isLoadingProject, setIsLoadingProject] = useState(!!projectIdParam);
+  const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [showAutoSaveNotification, setShowAutoSaveNotification] = useState(false);
   
   // Video and audio clips data
   const [clips, setClips] = useState<Clip[]>([]);
@@ -170,13 +195,176 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
   const [draggedClip, setDraggedClip] = useState<Clip | null>(null);
   const [showRightSidebar, setShowRightSidebar] = useState(true);
   
+  // Text overlay state
+  const [textOverlays, setTextOverlays] = useState<TextOverlay[]>([]);
+  const [showTextOverlayModal, setShowTextOverlayModal] = useState(false);
+  const [editingOverlay, setEditingOverlay] = useState<TextOverlay | null>(null);
+  const [editingOverlayDraft, setEditingOverlayDraft] = useState<Partial<TextOverlay>>({ text: '', startTime: 0, endTime: 0, position: 'center', fontSize: 32 });
+  const [showTextOverlayPanel, setShowTextOverlayPanel] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingTimeRef = useRef<number>(0);
   
+  // Backend URL with fallback
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
+  
+  console.log('🔧 Editor page initialized with backend URL:', backendUrl);
+  console.log('🔧 Environment check:', {
+    hasBackendUrl: !!process.env.NEXT_PUBLIC_BACKEND_URL,
+    backendUrlValue: process.env.NEXT_PUBLIC_BACKEND_URL,
+    fallbackUsed: !process.env.NEXT_PUBLIC_BACKEND_URL
+  });
+
+  // Helper function to get the correct video URL
+  const getVideoUrl = (url: string | null) => {
+    if (!url) return '';
+    // If URL already starts with http, use it as-is (Supabase direct URL)
+    if (url.startsWith('http')) {
+      console.log('🔗 Using absolute URL:', url);
+      return url;
+    }
+    // Otherwise, prepend backend URL
+    const fullUrl = `${backendUrl}${url}`;
+    console.log('🔗 Constructed URL:', { original: url, backend: backendUrl, full: fullUrl });
+    return fullUrl;
+  };
+
   // Animation scenes data for the timeline
   const [scenes, setScenes] = useState<any[]>([]);
+  
+  // Auto-save key for localStorage
+  const AUTO_SAVE_KEY = 'pixelateai_timeline_autosave';
+  
+  // Auto-save function to save entire timeline state
+  const saveTimelineState = () => {
+    setAutoSaveStatus('saving');
+    
+    const timelineState = {
+      timestamp: Date.now(),
+      projectTitle,
+      projectDescription,
+      prompt,
+      scenes,
+      timelineClips,
+      audioClips,
+      textOverlays,
+      clips, // Available clips in the media library
+      currentTime,
+      totalDuration,
+      // Add any other state that should be preserved
+      version: '1.0' // For future compatibility
+    };
+    
+    try {
+      localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(timelineState));
+      const saveTime = new Date();
+      setLastAutoSave(saveTime);
+      setAutoSaveStatus('saved');
+      console.log('💾 Auto-saved timeline state at', saveTime.toLocaleTimeString());
+      
+      // Reset status after 2 seconds
+      setTimeout(() => {
+        setAutoSaveStatus('idle');
+      }, 2000);
+    } catch (error) {
+      console.error('❌ Failed to auto-save timeline state:', error);
+      setAutoSaveStatus('error');
+      
+      // Reset status after 3 seconds
+      setTimeout(() => {
+        setAutoSaveStatus('idle');
+      }, 3000);
+    }
+  };
+  
+  // Load timeline state from localStorage
+  const loadTimelineState = () => {
+    try {
+      const savedState = localStorage.getItem(AUTO_SAVE_KEY);
+      if (savedState) {
+        const timelineState = JSON.parse(savedState);
+        console.log('📂 Loading auto-saved timeline state from', new Date(timelineState.timestamp).toLocaleString());
+        
+        // Restore all state
+        setProjectTitle(timelineState.projectTitle || 'My First Vlog');
+        setProjectDescription(timelineState.projectDescription || '');
+        setPrompt(timelineState.prompt || '');
+        setScenes(timelineState.scenes || []);
+        setTimelineClips(timelineState.timelineClips || []);
+        setAudioClips(timelineState.audioClips || []);
+        setTextOverlays(timelineState.textOverlays || []);
+        setClips(timelineState.clips || []);
+        setCurrentTime(timelineState.currentTime || 0);
+        setTotalDuration(timelineState.totalDuration || 30);
+        setLastAutoSave(new Date(timelineState.timestamp));
+        
+        // Show notification that auto-saved state was loaded
+        setShowAutoSaveNotification(true);
+        setTimeout(() => {
+          setShowAutoSaveNotification(false);
+        }, 5000); // Hide after 5 seconds
+        
+        return true; // Successfully loaded
+      }
+    } catch (error) {
+      console.error('❌ Failed to load auto-saved timeline state:', error);
+    }
+    return false; // No saved state or error
+  };
+  
+  // Clear auto-save (useful for starting fresh)
+  const clearAutoSave = () => {
+    localStorage.removeItem(AUTO_SAVE_KEY);
+    console.log('🗑️ Cleared auto-saved timeline state');
+  };
+  
+  // Clear entire timeline - everything
+  const clearEntireTimeline = () => {
+    console.log('🗑️ Clearing entire timeline...');
+    
+    // Clear all timeline content
+    setTimelineClips([]);
+    setAudioClips([]);
+    setTextOverlays([]);
+    setScenes([]);
+    setClips([]);
+    
+    // Reset playback state
+    setCurrentTime(0);
+    setTotalDuration(30);
+    setIsPlaying(false);
+    setSelectedClip(null);
+    
+    // Reset UI state
+    setShowPromptPanel(false);
+    setShowMediaPanel(false);
+    setShowVoiceRecorder(false);
+    setShowTextOverlayPanel(false);
+    
+    // Reset recording state
+    setIsRecording(false);
+    setRecordingTime(0);
+    recordingTimeRef.current = 0;
+    
+    // Stop any active recording
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+    }
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    
+    // Clear auto-save as well
+    clearAutoSave();
+    setLastAutoSave(null);
+    setAutoSaveStatus('idle');
+    
+    console.log('✅ Timeline cleared completely');
+  };
   
   // Load project data if projectId is provided
   useEffect(() => {
@@ -184,26 +372,61 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
       const loadProject = async () => {
         setIsLoadingProject(true);
         try {
-          // In a real implementation, this would call the API to get the project data
-          const response = await axios.get(`/api/projects?id=${projectIdParam}`);
+          // First check if project data is in sessionStorage (from projects page)
+          const loadProjectData = sessionStorage.getItem('loadProjectData');
           
-          if (response.data.success && response.data.projects.length > 0) {
-            const project = response.data.projects[0];
+          if (loadProjectData) {
+            console.log('📂 Loading project from sessionStorage');
+            const project = JSON.parse(loadProjectData);
+            
+            // Load all project data
             setProjectId(project.id);
             setProjectTitle(project.title);
             setProjectDescription(project.description || '');
             setPrompt(project.prompt || '');
+            setScenes(project.scenes || []);
+            setClips(project.clips || []);
+            setTimelineClips(project.timelineClips || []);
+            setAudioClips(project.audioClips || []);
+            setTextOverlays(project.textOverlays || []);
+            setCurrentTime(project.currentTime || 0);
+            setTotalDuration(project.totalDuration || 30);
             
-            if (project.scenes) {
-              setScenes(project.scenes);
-            }
+            // Clear sessionStorage after loading
+            sessionStorage.removeItem('loadProjectData');
+            console.log('✅ Project loaded successfully:', project.title);
             
-            if (project.clips) {
-              setClips(project.clips);
+          } else {
+            // Fallback: try to load from localStorage directly
+            console.log('📂 Loading project from localStorage');
+            const projectsJson = localStorage.getItem('pixelateai_projects');
+            
+            if (projectsJson) {
+              const projects = JSON.parse(projectsJson);
+              const project = projects.find((p: any) => p.id === projectIdParam);
+              
+              if (project) {
+                setProjectId(project.id);
+                setProjectTitle(project.title);
+                setProjectDescription(project.description || '');
+                setPrompt(project.prompt || '');
+                setScenes(project.scenes || []);
+                setClips(project.clips || []);
+                setTimelineClips(project.timelineClips || []);
+                setAudioClips(project.audioClips || []);
+                setTextOverlays(project.textOverlays || []);
+                setCurrentTime(project.currentTime || 0);
+                setTotalDuration(project.totalDuration || 30);
+                console.log('✅ Project loaded from localStorage:', project.title);
+              } else {
+                console.warn('⚠️ Project not found in localStorage:', projectIdParam);
+              }
+            } else {
+              console.warn('⚠️ No projects found in localStorage');
             }
           }
         } catch (error) {
-          console.error('Error loading project:', error);
+          console.error('❌ Error loading project:', error);
         } finally {
           setIsLoadingProject(false);
         }
@@ -211,35 +434,62 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
       
       loadProject();
     } else {
-      // Check if there's new project data in sessionStorage
-      const newProjectData = typeof window !== 'undefined' ? 
-        sessionStorage.getItem('newProjectData') : null;
+      // No project ID provided, try to load auto-saved state first
+      const hasAutoSave = loadTimelineState();
       
-      if (newProjectData) {
-        try {
-          const projectData = JSON.parse(newProjectData);
-          
-          // Update state with the project data
-          if (projectData.prompt) {
-            setPrompt(projectData.prompt);
+      if (!hasAutoSave) {
+        // No auto-save found, check for session storage (new project data)
+        const newProjectData = typeof window !== 'undefined' ? 
+          sessionStorage.getItem('newProjectData') : null;
+        
+        if (newProjectData) {
+          try {
+            const projectData = JSON.parse(newProjectData);
+            
+            // Update state with the project data
+            if (projectData.prompt) {
+              setPrompt(projectData.prompt);
+            }
+            
+            if (projectData.scenes && projectData.scenes.length > 0) {
+              setScenes(projectData.scenes);
+            }
+            
+            if (projectData.clips && projectData.clips.length > 0) {
+              setClips(projectData.clips);
+            }
+            
+            // Clear the sessionStorage after loading
+            sessionStorage.removeItem('newProjectData');
+          } catch (error) {
+            console.error('Error parsing project data from sessionStorage:', error);
           }
-          
-          if (projectData.scenes && projectData.scenes.length > 0) {
-            setScenes(projectData.scenes);
-          }
-          
-          if (projectData.clips && projectData.clips.length > 0) {
-            setClips(projectData.clips);
-          }
-          
-          // Clear the sessionStorage after loading
-          sessionStorage.removeItem('newProjectData');
-        } catch (error) {
-          console.error('Error parsing project data from sessionStorage:', error);
         }
       }
     }
   }, [projectIdParam]);
+  
+  // Auto-save interval - save every 5 seconds
+  useEffect(() => {
+    const autoSaveInterval = setInterval(() => {
+      // Only auto-save if there's meaningful content
+      if (timelineClips.length > 0 || audioClips.length > 0 || textOverlays.length > 0 || scenes.length > 0 || prompt.trim()) {
+        saveTimelineState();
+      }
+    }, 5000); // 5 seconds
+    
+    // Save immediately when any important state changes
+    const timeoutId = setTimeout(() => {
+      if (timelineClips.length > 0 || audioClips.length > 0 || textOverlays.length > 0 || scenes.length > 0 || prompt.trim()) {
+        saveTimelineState();
+      }
+    }, 1000); // 1 second delay after state change
+    
+    return () => {
+      clearInterval(autoSaveInterval);
+      clearTimeout(timeoutId);
+    };
+  }, [timelineClips, audioClips, textOverlays, scenes, prompt, projectTitle, projectDescription, currentTime]);
   
   const togglePlay = () => {
     setIsPlaying(!isPlaying);
@@ -259,6 +509,25 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
 
   const handleTimeUpdate = (time: number) => {
     setCurrentTime(time);
+    
+    // Check if we've reached the end of all content
+    const lastVideoClip = timelineClips
+      .filter(clip => clip.type === 'video')
+      .sort((a, b) => (b.endTime || 0) - (a.endTime || 0))[0];
+    const lastAudioClip = audioClips
+      .sort((a, b) => b.endTime - a.endTime)[0];
+    
+    const contentEndTime = Math.max(
+      lastVideoClip?.endTime || 0,
+      lastAudioClip?.endTime || 0,
+      totalDuration
+    );
+    
+    // If we've reached the end of content, stop playing
+    if (time >= contentEndTime && isPlaying) {
+      console.log('🛑 Editor: Reached end of content, stopping playback at', time);
+      setIsPlaying(false);
+    }
   };
 
   const handleLoadedMetadata = (duration: number) => {
@@ -270,6 +539,12 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
   };
 
   const formatTimeFromSeconds = (seconds: number): string => {
+    // Handle invalid values
+    if (typeof seconds !== 'number' || isNaN(seconds) || !isFinite(seconds) || seconds < 0) {
+      console.warn('⚠️ formatTimeFromSeconds: Invalid seconds value:', seconds, 'using 0 instead');
+      seconds = 0;
+    }
+    
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
@@ -292,6 +567,9 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
     
     setIsRegenerating(true);
     
+    // Clear existing scenes immediately when starting regeneration
+    setScenes([]);
+    
     try {
       // Call our Python backend through the Next.js API route
       const response = await axios.post('/api/prompt', {
@@ -307,6 +585,9 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
         // The format will depend on what your Python backend returns
         if (responseData.scenes) {
           setScenes(responseData.scenes);
+        } else {
+          // If no scenes returned, keep them cleared
+          setScenes([]);
         }
         
         // Update clips if returned from the backend
@@ -315,58 +596,405 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
         }
       } else {
         console.error('Error from backend:', response.data.error);
+        // Keep scenes cleared even on error
+        setScenes([]);
       }
       
     } catch (error) {
       console.error('Error regenerating animation:', error);
+      // Keep scenes cleared even on error
+      setScenes([]);
     } finally {
       setIsRegenerating(false);
     }
   };
 
-  const handleExport = (format: string, quality: string) => {
+  const handleExport = async (format: string, quality: string) => {
     setIsExporting(true);
     
-    // Simulate export process
-    setTimeout(() => {
-      console.log(`Exporting in ${format} format with ${quality} quality`);
+    try {
+      console.log(`🎬 Starting export in ${format} format with ${quality} quality`);
+      
+      // Check if we have any content to export
+      if (timelineClips.length === 0 && audioClips.length === 0 && scenes.length === 0) {
+        alert('No content found to export. Please add video clips, audio, or generate scenes first.');
+        setIsExporting(false);
+        return;
+      }
+      
+      // Set canvas dimensions based on quality
+      let width = 1920, height = 1080; // Default high quality
+      if (quality === 'medium') {
+        width = 1280;
+        height = 720;
+      } else if (quality === 'low') {
+        width = 854;
+        height = 480;
+      }
+
+      // Check MediaRecorder support
+      if (!MediaRecorder.isTypeSupported('video/webm') && !MediaRecorder.isTypeSupported('video/mp4')) {
+        console.error('❌ MediaRecorder not supported');
+        alert('Video export is not supported in your browser. Please try using Chrome or Firefox.');
+        setIsExporting(false);
+        return;
+      }
+
+      // Create a canvas for rendering
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        console.error('❌ Could not get canvas context');
+        alert('Export failed: Canvas not supported in your browser');
+        setIsExporting(false);
+        return;
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      // Create MediaRecorder for video capture
+      const stream = canvas.captureStream(30); // 30 FPS
+      
+      const mimeType = format === 'webm' ? 'video/webm' : 'video/mp4';
+      const supportedMimeType = MediaRecorder.isTypeSupported(mimeType) ? mimeType : 'video/webm';
+      
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: supportedMimeType,
+        videoBitsPerSecond: quality === 'high' ? 8000000 : quality === 'medium' ? 4000000 : 2000000
+      });
+
+      const chunks: Blob[] = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: supportedMimeType });
+        const url = URL.createObjectURL(blob);
+        
+        // Create download link
+        const a = document.createElement('a');
+        a.href = url;
+        const fileExtension = supportedMimeType.includes('webm') ? 'webm' : 'mp4';
+        a.download = `${projectTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_export.${fileExtension}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        // Cleanup
+        URL.revokeObjectURL(url);
+        
+        console.log('✅ Export completed successfully');
+        setIsExporting(false);
+        setShowExportModal(false);
+        
+        // Show success message
+        alert(`Video exported successfully as ${a.download}!`);
+      };
+
+      mediaRecorder.onerror = (event) => {
+        console.error('❌ MediaRecorder error:', event);
+        alert('Export failed during recording. Please try again.');
+        setIsExporting(false);
+        setShowExportModal(false);
+      };
+
+      // Start recording
+      mediaRecorder.start(100); // Collect data every 100ms
+      
+      // Create a map of video elements for each clip
+      const videoElements = new Map<string, HTMLVideoElement>();
+      
+      // Preload all video clips for export
+      const videoClips = timelineClips.filter(clip => clip.type === 'video' && clip.url);
+      
+      if (videoClips.length > 0) {
+        console.log(`📹 Preloading ${videoClips.length} video clips for export...`);
+        
+        const loadPromises = videoClips.map(clip => {
+          return new Promise<void>((resolve, reject) => {
+            const video = document.createElement('video');
+            video.crossOrigin = 'anonymous';
+            video.muted = true;
+            video.preload = 'auto';
+            
+            video.onloadeddata = () => {
+              console.log(`✅ Loaded video for export: ${clip.name}`);
+              videoElements.set(clip.id, video);
+              resolve();
+            };
+            
+            video.onerror = () => {
+              console.error(`❌ Failed to load video for export: ${clip.name}`);
+              reject(new Error(`Failed to load video: ${clip.name}`));
+            };
+            
+            video.src = clip.url!;
+          });
+        });
+        
+        try {
+          await Promise.all(loadPromises);
+          console.log('✅ All videos loaded for export');
+        } catch (error) {
+          console.error('❌ Failed to load some videos for export:', error);
+          alert('Failed to load some videos for export. The export may be incomplete.');
+        }
+      }
+
+      // Reset video to beginning and start playback
+      setCurrentTime(0);
+      setIsPlaying(true);
+      
+      // Export duration - calculate actual content end time
+      const lastVideoClip = timelineClips
+        .filter(clip => clip.type === 'video')
+        .sort((a, b) => (b.endTime || 0) - (a.endTime || 0))[0];
+      const lastAudioClip = audioClips
+        .sort((a, b) => b.endTime - a.endTime)[0];
+      const lastTextOverlay = textOverlays
+        .sort((a, b) => b.endTime - a.endTime)[0];
+      
+      const contentEndTime = Math.max(
+        lastVideoClip?.endTime || 0,
+        lastAudioClip?.endTime || 0,
+        lastTextOverlay?.endTime || 0,
+        5 // Minimum 5 seconds
+      );
+      
+      const exportDuration = contentEndTime; // Use actual content end time, not totalDuration
+      const frameRate = 30;
+      const totalFrames = Math.floor(exportDuration * frameRate);
+      let currentFrame = 0;
+      
+      console.log(`🎬 Starting export: ${exportDuration}s (content ends at ${contentEndTime}s), ${totalFrames} frames`, {
+        lastVideoEnd: lastVideoClip?.endTime || 0,
+        lastAudioEnd: lastAudioClip?.endTime || 0,
+        lastTextEnd: lastTextOverlay?.endTime || 0,
+        totalDuration: totalDuration,
+        exportDuration: exportDuration
+      });
+      
+      // Function to render a frame at a specific time
+      const renderFrame = (time: number) => {
+        // Clear canvas with black background
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Find active video clip at this time
+        const activeClip = timelineClips.find(clip => 
+          clip.type === 'video' && 
+          (clip.startTime || 0) <= time && 
+          (clip.endTime || 0) > time
+        );
+        
+        if (activeClip && videoElements.has(activeClip.id)) {
+          const video = videoElements.get(activeClip.id)!;
+          
+          // Calculate time within the clip
+          const clipStartTime = activeClip.startTime || 0;
+          const timeInClip = time - clipStartTime;
+          
+          // Set video time
+          video.currentTime = timeInClip;
+          
+          // Draw video frame if it has dimensions
+          if (video.videoWidth > 0 && video.videoHeight > 0) {
+            const videoAspectRatio = video.videoWidth / video.videoHeight;
+            const canvasAspectRatio = width / height;
+            
+            let drawWidth = width;
+            let drawHeight = height;
+            let offsetX = 0;
+            let offsetY = 0;
+            
+            if (videoAspectRatio > canvasAspectRatio) {
+              drawHeight = width / videoAspectRatio;
+              offsetY = (height - drawHeight) / 2;
+            } else {
+              drawWidth = height * videoAspectRatio;
+              offsetX = (width - drawWidth) / 2;
+            }
+            
+            ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+          }
+        } else {
+          // No video clip active, draw a placeholder or project info
+          ctx.fillStyle = '#1a1a1a';
+          ctx.fillRect(0, 0, width, height);
+          
+          // Draw project title
+          ctx.fillStyle = 'white';
+          ctx.font = `bold ${Math.floor(width / 30)}px Arial`;
+          ctx.textAlign = 'center';
+          ctx.fillText(projectTitle, width / 2, height / 2);
+          
+          // Draw time indicator
+          ctx.font = `${Math.floor(width / 50)}px Arial`;
+          ctx.fillText(`${Math.floor(time)}s / ${Math.floor(exportDuration)}s`, width / 2, height / 2 + 60);
+        }
+        
+        // Draw text overlays
+        textOverlays.forEach(overlay => {
+          if (time >= overlay.startTime && time <= overlay.endTime) {
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${Math.floor(overlay.fontSize * (width / 1920))}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 3;
+            
+            let textY = height * 0.15; // top
+            if (overlay.position === 'center') textY = height * 0.5;
+            if (overlay.position === 'bottom') textY = height * 0.85;
+            
+            // Draw text with outline
+            ctx.strokeText(overlay.text, width / 2, textY);
+            ctx.fillText(overlay.text, width / 2, textY);
+          }
+        });
+      };
+      
+      // Animation loop for export
+      const exportFrame = () => {
+        const time = (currentFrame / frameRate);
+        
+        if (time <= exportDuration) {
+          renderFrame(time);
+          currentFrame++;
+          
+          // Continue to next frame
+          setTimeout(exportFrame, 1000 / frameRate); // Maintain frame rate
+        } else {
+          // Export complete
+          console.log('🎬 Export rendering complete, stopping recorder...');
+          if (mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+          }
+          
+          // Cleanup video elements
+          videoElements.forEach(video => {
+            video.src = '';
+          });
+          videoElements.clear();
+        }
+      };
+      
+      // Start the export animation
+      exportFrame();
+      
+    } catch (error) {
+      console.error('❌ Export failed:', error);
+      alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
       setIsExporting(false);
       setShowExportModal(false);
+    }
+  };
+
+  // Alternative export method for when video capture fails
+  const handleAlternativeExport = async (format: string, quality: string) => {
+    try {
+      console.log('🔄 Using alternative export method');
       
-      // In a real implementation, this would trigger the export process
-      // and potentially download the file or provide a link
-    }, 2000);
+      // Create a simple video file with project information
+      const projectData = {
+        title: projectTitle,
+        description: projectDescription,
+        clips: timelineClips.length,
+        audioClips: audioClips.length,
+        textOverlays: textOverlays.length,
+        duration: totalDuration,
+        exportedAt: new Date().toISOString()
+      };
+      
+      const jsonBlob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(jsonBlob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${projectTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_project_data.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      URL.revokeObjectURL(url);
+      
+      alert('Video export not available. Project data has been exported instead. Please use a modern browser with video recording support for full video export.');
+      
+    } catch (error) {
+      console.error('❌ Alternative export failed:', error);
+      alert('Export failed completely. Please check your browser compatibility.');
+    } finally {
+      setIsExporting(false);
+      setShowExportModal(false);
+    }
   };
 
   const handleSaveProject = async (title: string, description: string) => {
     setIsSaving(true);
     
     try {
-      // Prepare project data
+      // Generate unique project ID if not exists
+      const newProjectId = projectId || `project-${Date.now()}`;
+      
+      // Prepare comprehensive project data
       const projectData = {
-        id: projectId,
+        id: newProjectId,
         title,
         description,
         prompt,
         scenes,
         clips,
+        timelineClips,
         audioClips,
-        // Include other project data as needed
+        textOverlays,
+        currentTime,
+        totalDuration,
+        createdAt: projectId ? undefined : new Date().toISOString(), // Only set on creation
+        updatedAt: new Date().toISOString(),
+        version: '1.0'
       };
       
-      // Save to API
-      const response = await axios.post('/api/projects', projectData);
+      // Get existing projects from localStorage
+      const existingProjectsJson = localStorage.getItem('pixelateai_projects');
+      const existingProjects = existingProjectsJson ? JSON.parse(existingProjectsJson) : [];
       
-      if (response.data.success) {
-        // Update project state
-        setProjectTitle(title);
-        setProjectDescription(description);
-        setProjectId(response.data.project.id);
-        setShowSaveModal(false);
+      // Check if project already exists (update) or is new (create)
+      const existingProjectIndex = existingProjects.findIndex((p: any) => p.id === newProjectId);
+      
+      if (existingProjectIndex >= 0) {
+        // Update existing project
+        existingProjects[existingProjectIndex] = {
+          ...existingProjects[existingProjectIndex],
+          ...projectData
+        };
+        console.log('📝 Updated existing project:', title);
+      } else {
+        // Add new project
+        projectData.createdAt = new Date().toISOString();
+        existingProjects.push(projectData);
+        console.log('✨ Created new project:', title);
       }
+      
+      // Save back to localStorage
+      localStorage.setItem('pixelateai_projects', JSON.stringify(existingProjects));
+      
+      // Update component state
+      setProjectTitle(title);
+      setProjectDescription(description);
+      setProjectId(newProjectId);
+      setShowSaveModal(false);
+      
+      // Show success notification
+      console.log('💾 Project saved successfully to local storage');
+      
     } catch (error) {
-      console.error('Error saving project:', error);
-      // Handle error
+      console.error('❌ Error saving project to local storage:', error);
+      // You could add a toast notification here for user feedback
     } finally {
       setIsSaving(false);
     }
@@ -375,17 +1003,32 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
   // Calculate total duration when clips change
   useEffect(() => {
     const maxVideoTime = timelineClips.length > 0 
-      ? Math.max(...timelineClips.map(clip => clip.endTime || 0))
+      ? Math.max(...timelineClips.map(clip => {
+          const endTime = clip.endTime || 0;
+          return typeof endTime === 'number' && !isNaN(endTime) ? endTime : 0;
+        }))
       : 0;
     const maxAudioTime = audioClips.length > 0 
-      ? Math.max(...audioClips.map(clip => clip.endTime))
+      ? Math.max(...audioClips.map(clip => {
+          const endTime = clip.endTime;
+          return typeof endTime === 'number' && !isNaN(endTime) ? endTime : 0;
+        }))
       : 0;
     const maxSceneTime = scenes.length > 0 
-      ? scenes.reduce((acc, scene, index) => acc + (scene.duration / 1000), 0)
+      ? scenes.reduce((acc, scene, index) => {
+          const duration = scene.duration / 1000;
+          return acc + (typeof duration === 'number' && !isNaN(duration) ? duration : 0);
+        }, 0)
       : 0;
       
     const calculatedDuration = Math.max(maxVideoTime, maxAudioTime, maxSceneTime, 30);
-    setTotalDuration(calculatedDuration);
+    
+    // Ensure the calculated duration is always a valid positive number
+    const safeDuration = typeof calculatedDuration === 'number' && !isNaN(calculatedDuration) && calculatedDuration > 0 
+      ? calculatedDuration 
+      : 30;
+    
+    setTotalDuration(safeDuration);
   }, [timelineClips, audioClips, scenes]);
 
   // Load gallery videos
@@ -450,11 +1093,47 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
         e.preventDefault();
         togglePlay();
       }
+      
+      // Split video at playhead position with Ctrl+X or Cmd+X
+      if (e.key === 'x' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        
+        // Find the video clip that the playhead is currently over
+        const activeVideoClip = timelineClips.find(clip => 
+          clip.type === 'video' && 
+          (clip.startTime || 0) <= currentTime && 
+          (clip.endTime || 0) > currentTime
+        );
+        
+        if (activeVideoClip) {
+          // Calculate the split time relative to the clip's start
+          const splitTimeInClip = currentTime - (activeVideoClip.startTime || 0);
+          
+          // Only split if the playhead is not at the very beginning or end of the clip
+          const clipDuration = (activeVideoClip.endTime || 0) - (activeVideoClip.startTime || 0);
+          if (splitTimeInClip > 0.1 && splitTimeInClip < clipDuration - 0.1) {
+            console.log('🔪 Splitting video clip at playhead position:', {
+              clipId: activeVideoClip.id,
+              clipName: activeVideoClip.name,
+              currentTime: currentTime,
+              clipStartTime: activeVideoClip.startTime,
+              splitTimeInClip: splitTimeInClip,
+              clipDuration: clipDuration
+            });
+            
+            handleTimelineClipCut(activeVideoClip.id, splitTimeInClip);
+          } else {
+            console.log('⚠️ Cannot split: playhead too close to clip boundaries');
+          }
+        } else {
+          console.log('⚠️ No video clip found at current playhead position:', currentTime);
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedClip, timelineClips, isPlaying]);
+  }, [selectedClip, timelineClips, isPlaying, currentTime]);
 
   // Cleanup function for component unmount
   useEffect(() => {
@@ -513,14 +1192,39 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
       const audio = document.createElement('audio');
       
       audio.onloadedmetadata = () => {
+        let duration = audio.duration;
+        
+        // Ensure duration is a valid positive number
+        if (typeof duration !== 'number' || isNaN(duration) || duration <= 0) {
+          console.warn('⚠️ Invalid audio file duration, using default 10 seconds');
+          duration = 10; // Default to 10 seconds
+        }
+        
         const newAudioClip: AudioClip = {
           id: `audio-${Date.now()}`,
           name: file.name,
-          duration: audio.duration,
+          duration: duration,
           url,
           file,
           startTime: 0,
-          endTime: audio.duration
+          endTime: duration
+        };
+        
+        setAudioClips(prev => [...prev, newAudioClip]);
+      };
+      
+      audio.onerror = () => {
+        console.error('❌ Error loading audio file metadata');
+        // Create clip with default duration if metadata loading fails
+        const defaultDuration = 10;
+        const newAudioClip: AudioClip = {
+          id: `audio-${Date.now()}`,
+          name: file.name,
+          duration: defaultDuration,
+          url,
+          file,
+          startTime: 0,
+          endTime: defaultDuration
         };
         
         setAudioClips(prev => [...prev, newAudioClip]);
@@ -531,10 +1235,9 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
   };
 
   const handleGalleryVideoSelect = (video: any) => {
-    // Construct full URL for the video
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
-    const fullVideoUrl = `${backendUrl}${video.video_url}`;
-    const fullThumbnailUrl = video.thumbnail ? `${backendUrl}${video.thumbnail}` : '';
+    // Use the helper function to get the correct video URL
+    const fullVideoUrl = getVideoUrl(video.video_url);
+    const fullThumbnailUrl = video.thumbnail ? getVideoUrl(video.thumbnail) : '';
     
     console.log('Adding gallery video:', {
       id: video.id,
@@ -569,75 +1272,264 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      
+      // Try different formats in order of preference
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/webm';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'audio/mp4';
+          if (!MediaRecorder.isTypeSupported(mimeType)) {
+            mimeType = 'audio/wav';
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+              mimeType = ''; // Let browser choose
+            }
+          }
+        }
+      }
+      
+      console.log('🎙️ Using audio format:', mimeType || 'browser default');
+      
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       const chunks: Blob[] = [];
 
       mediaRecorder.ondataavailable = (event) => {
+        console.log('📊 Recording data available:', event.data.size, 'bytes');
         if (event.data.size > 0) {
           chunks.push(event.data);
         }
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/wav' });
+        console.log('🛑 Recording stopped, processing', chunks.length, 'chunks');
+        console.log('⏱️ Recording time values at onstop:', {
+          recordingTimeState: recordingTime,
+          recordingTimeRef: recordingTimeRef.current,
+          willUseRef: true
+        });
+        
+        const finalMimeType = mediaRecorder.mimeType || mimeType || 'audio/webm';
+        const blob = new Blob(chunks, { type: finalMimeType });
         const url = URL.createObjectURL(blob);
         
-        // Check if this is a voiceover for timeline
-        const voiceoverStartTime = sessionStorage.getItem('voiceoverStartTime');
+        console.log('🎵 Created audio blob:', {
+          size: blob.size,
+          type: blob.type,
+          detectedMimeType: finalMimeType,
+          timerDuration: recordingTimeRef.current,
+          url: url.substring(0, 50) + '...'
+        });
         
-        if (voiceoverStartTime) {
-          const startTime = parseFloat(voiceoverStartTime);
-          const newAudioClip: AudioClip = {
-            id: `voiceover-${Date.now()}`,
-            name: `Voiceover ${formatTime(recordingTime)}`,
-            duration: recordingTime,
-            url,
-            startTime,
-            endTime: startTime + recordingTime
-          };
-          
-          setAudioClips(prev => [...prev, newAudioClip]);
-          sessionStorage.removeItem('voiceoverStartTime');
-          setShowVoiceRecorder(false);
-        } else {
-          const newAudioClip: AudioClip = {
-            id: `recording-${Date.now()}`,
-            name: `Voice Recording ${formatTime(recordingTime)}`,
-            duration: recordingTime,
-            url,
-            startTime: 0,
-            endTime: recordingTime
-          };
-          
-          setAudioClips(prev => [...prev, newAudioClip]);
-        }
+        // Create audio element to get actual duration
+        const audio = document.createElement('audio');
+        audio.src = url;
         
+        audio.onloadedmetadata = () => {
+          const actualDuration = audio.duration;
+          const currentRecordingTime = recordingTimeRef.current;
+          console.log('⏱️ Audio duration comparison:', {
+            timerDuration: currentRecordingTime,
+            actualDuration: actualDuration,
+            difference: Math.abs(actualDuration - currentRecordingTime)
+          });
+          
+          // Use the actual audio duration instead of timer, with validation
+          let finalDuration = actualDuration || currentRecordingTime;
+          
+          // Ensure duration is a valid positive number
+          if (typeof finalDuration !== 'number' || isNaN(finalDuration) || finalDuration < 0) {
+            console.warn('⚠️ Invalid audio duration detected, using timer duration:', finalDuration);
+            finalDuration = currentRecordingTime > 0 ? currentRecordingTime : 1; // Minimum 1 second
+          }
+          
+          console.log('🎵 Final duration calculation:', {
+            actualDuration,
+            recordingTime: currentRecordingTime,
+            finalDuration,
+            formattedTime: formatTime(finalDuration),
+            isValidNumber: typeof finalDuration === 'number' && !isNaN(finalDuration) && finalDuration > 0
+          });
+          
+          // Check if this is a voiceover for timeline
+          const voiceoverStartTime = sessionStorage.getItem('voiceoverStartTime');
+          
+          if (voiceoverStartTime) {
+            const startTime = parseFloat(voiceoverStartTime);
+            // Validate startTime as well
+            const validStartTime = typeof startTime === 'number' && !isNaN(startTime) ? startTime : 0;
+            
+            const newAudioClip: AudioClip = {
+              id: `voiceover-${Date.now()}`,
+              name: `Voiceover ${formatTime(finalDuration)}`,
+              duration: finalDuration,
+              url,
+              startTime: validStartTime,
+              endTime: validStartTime + finalDuration
+            };
+            
+            console.log('✅ Created voiceover clip:', {
+              ...newAudioClip,
+              calculatedWidth: `${(newAudioClip.endTime - newAudioClip.startTime) * 100}px`,
+              durationDifference: newAudioClip.endTime - newAudioClip.startTime
+            });
+            setAudioClips(prev => [...prev, newAudioClip]);
+            sessionStorage.removeItem('voiceoverStartTime');
+            setShowVoiceRecorder(false);
+          } else {
+            const newAudioClip: AudioClip = {
+              id: `recording-${Date.now()}`,
+              name: `Voice Recording ${formatTime(finalDuration)}`,
+              duration: finalDuration,
+              url,
+              startTime: 0,
+              endTime: finalDuration
+            };
+            
+            console.log('✅ Created voice recording clip:', {
+              ...newAudioClip,
+              calculatedWidth: `${(newAudioClip.endTime - newAudioClip.startTime) * 100}px`,
+              durationDifference: newAudioClip.endTime - newAudioClip.startTime
+            });
+            setAudioClips(prev => [...prev, newAudioClip]);
+          }
+          
+          // Reset the recording state after successful clip creation (fallback case)
+          setIsRecording(false);
+          setRecordingTime(0);
+          recordingTimeRef.current = 0;
+          
+          audio.remove();
+        };
+        
+        audio.onerror = () => {
+          console.error('❌ Error loading audio metadata, using timer duration');
+          // Fallback to timer duration if audio loading fails
+          const currentRecordingTime = recordingTimeRef.current;
+          let fallbackDuration = currentRecordingTime;
+          
+          // Ensure fallback duration is valid
+          if (typeof fallbackDuration !== 'number' || isNaN(fallbackDuration) || fallbackDuration < 0) {
+            console.warn('⚠️ Invalid timer duration, using default 1 second');
+            fallbackDuration = 1; // Minimum 1 second
+          }
+          
+          console.log('🎵 Fallback duration calculation:', {
+            recordingTime: currentRecordingTime,
+            fallbackDuration,
+            formattedTime: formatTime(fallbackDuration),
+            isValidNumber: typeof fallbackDuration === 'number' && !isNaN(fallbackDuration) && fallbackDuration > 0
+          });
+          
+          const voiceoverStartTime = sessionStorage.getItem('voiceoverStartTime');
+          
+          if (voiceoverStartTime) {
+            const startTime = parseFloat(voiceoverStartTime);
+            const validStartTime = typeof startTime === 'number' && !isNaN(startTime) ? startTime : 0;
+            
+            const newAudioClip: AudioClip = {
+              id: `voiceover-${Date.now()}`,
+              name: `Voiceover ${formatTime(fallbackDuration)}`,
+              duration: fallbackDuration,
+              url,
+              startTime: validStartTime,
+              endTime: validStartTime + fallbackDuration
+            };
+            
+            console.log('✅ Created fallback voiceover clip:', {
+              ...newAudioClip,
+              calculatedWidth: `${(newAudioClip.endTime - newAudioClip.startTime) * 100}px`,
+              durationDifference: newAudioClip.endTime - newAudioClip.startTime
+            });
+            setAudioClips(prev => [...prev, newAudioClip]);
+            sessionStorage.removeItem('voiceoverStartTime');
+            setShowVoiceRecorder(false);
+          } else {
+            const newAudioClip: AudioClip = {
+              id: `recording-${Date.now()}`,
+              name: `Voice Recording ${formatTime(fallbackDuration)}`,
+              duration: fallbackDuration,
+              url,
+              startTime: 0,
+              endTime: fallbackDuration
+            };
+            
+            console.log('✅ Created fallback voice recording clip:', {
+              ...newAudioClip,
+              calculatedWidth: `${(newAudioClip.endTime - newAudioClip.startTime) * 100}px`,
+              durationDifference: newAudioClip.endTime - newAudioClip.startTime
+            });
+            setAudioClips(prev => [...prev, newAudioClip]);
+          }
+          
+          // Reset the recording state after successful clip creation (fallback case)
+          setIsRecording(false);
+          setRecordingTime(0);
+          recordingTimeRef.current = 0;
+          
+          audio.remove();
+        };
+        
+        // Load the audio to get metadata
+        audio.load();
+        
+        // Stop all tracks
         stream.getTracks().forEach(track => track.stop());
       };
 
       mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start();
+      
+      // Start recording with data collection every 100ms for better capture
+      mediaRecorder.start(100);
       setIsRecording(true);
       setRecordingTime(0);
+      recordingTimeRef.current = 0; // Initialize ref
+      
+      console.log('🎙️ Started recording with format:', mediaRecorder.mimeType);
       
       recordingTimerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
+        setRecordingTime(prev => {
+          const newTime = prev + 1;
+          recordingTimeRef.current = newTime; // Keep ref in sync
+          console.log('⏱️ Timer tick - Recording time:', newTime, 'seconds (state will be:', newTime, ', ref is:', recordingTimeRef.current, ')');
+          return newTime;
+        });
       }, 1000);
       
     } catch (error) {
-      console.error('Error starting recording:', error);
+      console.error('❌ Error starting recording:', error);
     }
   };
 
   const stopRecording = () => {
+    // LOG EVERYTHING FIRST - before any processing
+    console.log('🚨 STOP BUTTON CLICKED - Current time values:');
+    console.log('📊 recordingTime state:', recordingTime);
+    console.log('📊 recordingTimeRef.current:', recordingTimeRef.current);
+    console.log('📊 isRecording:', isRecording);
+    console.log('📊 mediaRecorderRef.current exists:', !!mediaRecorderRef.current);
+    console.log('📊 recordingTimerRef.current exists:', !!recordingTimerRef.current);
+    
+    console.log('🛑 Stopping recording...');
     if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
+      console.log('📊 MediaRecorder state:', mediaRecorderRef.current.state);
+      console.log('⏱️ Final recording time before stop:', recordingTimeRef.current, 'seconds');
+      console.log('⏱️ Recording time state before stop:', recordingTime, 'seconds');
       
+      // Stop the media recorder (this will trigger the onstop callback)
+      mediaRecorderRef.current.stop();
+      
+      // Clear the timer immediately to stop counting
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
         recordingTimerRef.current = null;
       }
+      
+      // DON'T reset isRecording or recordingTime here - let the onstop callback handle it
+      // This ensures the values are preserved when the audio clip is created
+      
+      console.log('✅ Recording stop initiated, waiting for onstop callback...');
+    } else {
+      console.log('⚠️ No active recording to stop');
     }
   };
 
@@ -722,25 +1614,33 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
       const sortedClips = [...timelineClips].sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
       let startTime = 0;
       
-      // Find the appropriate insertion point
-      for (let i = 0; i < sortedClips.length; i++) {
-        const clip = sortedClips[i];
-        const clipStart = clip.startTime || 0;
-        const clipEnd = clip.endTime || 0;
-        
-        // If dropping before this clip and there's enough space
-        if (dropPosition < clipStart) {
-          const availableSpace = clipStart - startTime;
-          const clipDuration = parseTimeToSeconds(draggedClip.duration);
+      // If timeline is empty, always start at 0
+      if (sortedClips.length === 0) {
+        startTime = 0;
+        console.log('Timeline: Empty timeline, placing clip at start (0s)');
+      } else {
+        // Find the appropriate insertion point
+        for (let i = 0; i < sortedClips.length; i++) {
+          const clip = sortedClips[i];
+          const clipStart = clip.startTime || 0;
+          const clipEnd = clip.endTime || 0;
           
-          if (availableSpace >= clipDuration) {
-            // Fit the clip in this gap, starting right after previous clip
-            break;
+          // If dropping before this clip and there's enough space
+          if (dropPosition < clipStart) {
+            const availableSpace = clipStart - startTime;
+            const clipDuration = parseTimeToSeconds(draggedClip.duration);
+            
+            if (availableSpace >= clipDuration) {
+              // Fit the clip in this gap, starting right after previous clip
+              console.log('Timeline: Placing clip in gap at', startTime, 's');
+              break;
+            }
           }
+          
+          // Move to after this clip
+          startTime = clipEnd;
         }
-        
-        // Move to after this clip
-        startTime = clipEnd;
+        console.log('Timeline: Placing clip after existing clips at', startTime, 's');
       }
       
       const newTimelineClip: Clip = {
@@ -755,7 +1655,9 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
         name: newTimelineClip.name,
         url: newTimelineClip.url,
         startTime: newTimelineClip.startTime,
-        endTime: newTimelineClip.endTime
+        endTime: newTimelineClip.endTime,
+        originalClipUrl: draggedClip.url,
+        urlType: newTimelineClip.url?.startsWith('http') ? 'absolute' : 'relative'
       });
       
       setTimelineClips(prev => {
@@ -831,6 +1733,12 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
 
   // Utility functions
   const formatTime = (seconds: number): string => {
+    // Handle invalid values - only reject NaN, Infinity, and negative numbers
+    if (typeof seconds !== 'number' || isNaN(seconds) || !isFinite(seconds) || seconds < 0) {
+      console.warn('⚠️ formatTime: Invalid seconds value:', seconds, 'using 0 instead');
+      seconds = 0;
+    }
+    
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
@@ -860,6 +1768,50 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
     return 10;
   };
 
+  // At the top of EditorPageContent (after useState declarations)
+  console.log('🔄 EditorPageContent render:', {
+    isRecording,
+    recordingTime,
+    recordingTimeRef: recordingTimeRef.current
+  });
+
+  // In startRecording, at the very top
+  console.log('🚦 startRecording called. isRecording:', isRecording, 'recordingTime:', recordingTime, 'recordingTimeRef:', recordingTimeRef.current);
+
+  // In startRecording, after setInterval
+  console.log('⏰ setInterval created for timer.');
+
+  // In stopRecording, after clearInterval
+  console.log('⏰ setInterval cleared for timer.');
+
+  const openTextOverlayModal = (overlay?: TextOverlay) => {
+    if (overlay) {
+      setEditingOverlay(overlay);
+      setEditingOverlayDraft({ ...overlay });
+    } else {
+      setEditingOverlay(null);
+      setEditingOverlayDraft({ text: '', startTime: 0, endTime: 0, position: 'center', fontSize: 32 });
+    }
+    setShowTextOverlayModal(true);
+  };
+
+  const handleSaveTextOverlay = () => {
+    const overlay = { ...editingOverlayDraft } as TextOverlay;
+    if (editingOverlay) {
+      overlay.id = editingOverlay.id;
+      setTextOverlays(prev => prev.map(o => o.id === overlay.id ? overlay : o));
+    } else {
+      overlay.id = `text-${Date.now()}`;
+      setTextOverlays(prev => [...prev, overlay]);
+    }
+    setShowTextOverlayModal(false);
+    setEditingOverlay(null);
+  };
+
+  const handleDeleteTextOverlay = (id: string) => {
+    setTextOverlays(prev => prev.filter(o => o.id !== id));
+  };
+
   return (
     <div className="flex flex-col h-screen bg-[#0a0a0a] text-white">
       {isLoadingProject ? (
@@ -874,8 +1826,45 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
           {/* Top navigation bar */}
           <div className="bg-[#111] border-b border-[#222] px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-4">
+              <button 
+                onClick={() => window.location.href = '/projects'}
+                className="px-3 py-2 bg-[#222] text-white/70 rounded-lg hover:bg-[#333] hover:text-white transition-colors border border-[#333] flex items-center gap-2"
+                title="View all projects"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                Projects
+              </button>
               <div className="text-lg font-semibold text-white">{projectTitle}</div>
               <div className="text-sm text-white/50">Video Editor</div>
+              
+              {/* Auto-save status indicator */}
+              <div className="flex items-center gap-2 text-xs">
+                {autoSaveStatus === 'saving' && (
+                  <div className="flex items-center gap-1 text-yellow-400">
+                    <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                    <span>Saving...</span>
+                  </div>
+                )}
+                {autoSaveStatus === 'saved' && (
+                  <div className="flex items-center gap-1 text-green-400">
+                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                    <span>Auto-saved</span>
+                  </div>
+                )}
+                {autoSaveStatus === 'error' && (
+                  <div className="flex items-center gap-1 text-red-400">
+                    <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                    <span>Save failed</span>
+                  </div>
+                )}
+                {autoSaveStatus === 'idle' && lastAutoSave && (
+                  <div className="text-white/40">
+                    Last saved: {lastAutoSave.toLocaleTimeString()}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex items-center space-x-3">
               <button 
@@ -887,6 +1876,33 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h2a2 2 0 002-2z" />
                 </svg>
                 {showRightSidebar ? "Hide" : "Show"}
+              </button>
+              
+              {/* Manual auto-save controls */}
+              <button 
+                onClick={saveTimelineState}
+                className="px-3 py-2 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/30 transition-colors border border-blue-600/30 flex items-center gap-2"
+                title="Save timeline now"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                Save Now
+              </button>
+              
+              <button 
+                onClick={() => {
+                  if (confirm('Clear entire timeline? This will remove ALL content including videos, audio, text overlays, and scenes. This action cannot be undone.')) {
+                    clearEntireTimeline();
+                  }
+                }}
+                className="px-3 py-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600/30 transition-colors border border-red-600/30 flex items-center gap-2"
+                title="Clear entire timeline - removes all content"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Clear
               </button>
               {!showPromptPanel && (
                 <button 
@@ -968,7 +1984,7 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
               
               <button 
                 className="p-3 rounded-lg transition-all bg-[#222] text-white/70 hover:bg-[#333] hover:text-white border border-[#333]"
-                title="Cut Tool"
+                title="Cut Tool - Manual split or use Ctrl+X to split at playhead"
                 onClick={() => {
                   if (selectedClip) {
                     const time = window.prompt('Enter split time in seconds:');
@@ -1021,6 +2037,7 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
                   currentTime={currentTime}
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
+                  textOverlays={textOverlays}
                 />
               </div>
                 </div>
@@ -1044,6 +2061,19 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
                         </svg>
                       )}
                     </button>
+                    <button 
+                      onClick={() => {
+                        setIsPlaying(false);
+                        handleSeek(0);
+                      }}
+                      className="p-2 bg-[#333] text-white rounded-lg hover:bg-[#444] transition-colors border border-[#444]"
+                      title="Stop and reset to beginning"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                      </svg>
+                    </button>
                     <div className="flex items-center space-x-4">
                       <span className="text-sm text-white/70">
                         {formatTimeFromSeconds(currentTime)} / {formatTimeFromSeconds(totalDuration)}
@@ -1053,19 +2083,36 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
                           Selected: {selectedClip.name} | Del: Delete | Ctrl+C: Cut
                         </span>
                       )}
+                      
+                      {/* Keyboard shortcuts hint */}
+                      <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded border border-blue-600/30">
+                        💡 Ctrl+X: Split at playhead | Del: Delete selected
+                      </span>
+                      
+                      {/* Debug button to seek to 0 */}
+                      <button 
+                        onClick={() => handleSeek(0)}
+                        className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded border border-blue-600/30 hover:bg-blue-600/30"
+                        title="Seek to start"
+                      >
+                        ⏮ 0s
+                      </button>
                     </div>
                   </div>
                   
                   <div className="flex items-center space-x-2">
                     <button 
                       onClick={handleArrangeClips}
-                      className="p-2 text-white/70 hover:text-white transition-colors"
-                      title="Arrange clips without gaps"
+                      className="p-2 text-white/70 hover:text-white transition-colors bg-green-600/20 text-green-400 rounded border border-green-600/30"
+                      title="Arrange clips from start (no gaps)"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                       </svg>
                     </button>
+                    <span className="text-xs text-white/40">
+                      Clips: {timelineClips.length} | Videos: {timelineClips.filter(c => c.type === 'video').length}
+                    </span>
                     <button className="p-2 text-white/70 hover:text-white transition-colors">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -1098,10 +2145,13 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
                   onDragOver={handleTimelineDragOver}
                   onClipCut={handleTimelineClipCut}
                   onClipDelete={handleTimelineClipDelete}
+                  onClipSelect={setSelectedClip}
+                  selectedClipId={selectedClip?.id}
                   onAddVoiceover={handleAddVoiceover}
                   currentTime={currentTime}
-                  totalDuration={totalDuration}
+                  totalDuration={typeof totalDuration === 'number' && !isNaN(totalDuration) && totalDuration > 0 ? totalDuration : 30}
                   onSeek={handleSeek}
+                  textOverlays={textOverlays}
                 />
               </div>
             </div>
@@ -1141,6 +2191,16 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
                     }`}
                   >
                     Voice
+                  </button>
+                  <button 
+                    onClick={() => setShowTextOverlayPanel(!showTextOverlayPanel)}
+                    className={`px-3 py-1 rounded-lg text-xs transition-colors ${
+                      showTextOverlayPanel 
+                        ? 'bg-yellow-600/30 text-yellow-300 border border-yellow-600/50' 
+                        : 'bg-[#222] text-white/50 hover:bg-[#333] border border-[#333]'
+                    }`}
+                  >
+                    Text
                   </button>
                 </div>
               </div>
@@ -1211,10 +2271,11 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
                       </button>
                     </div>
                     <textarea
-                      className="w-full bg-[#111] border border-[#333] rounded-lg p-3 text-sm h-32 text-white resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full bg-[#111] border border-[#333] rounded-lg p-3 text-sm h-32 text-white resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder:text-white/40"
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                       placeholder="Describe what you want to animate..."
+                      style={{ color: '#ffffff' }}
                     />
                     <button 
                       className="mt-3 bg-gradient-to-r from-purple-600 to-blue-500 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50"
@@ -1375,6 +2436,93 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
                       <div className="mt-4 text-xs text-white/40">
                         Click microphone permissions if prompted
                 </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Text Overlay Panel */}
+                {showTextOverlayPanel && (
+                  <div className="bg-[#222] border border-[#333] rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="font-semibold text-white flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                        </svg>
+                        Text Overlays
+                      </h3>
+                      <button 
+                        onClick={() => setShowTextOverlayPanel(false)}
+                        className="text-white/50 hover:text-white/70 transition-colors"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    
+                    <button 
+                      onClick={() => openTextOverlayModal()}
+                      className="w-full mb-3 px-3 py-2 bg-yellow-600/20 text-yellow-400 rounded-lg text-sm hover:bg-yellow-600/30 transition-colors flex items-center justify-center gap-2 border border-yellow-600/30"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add Text Overlay
+                    </button>
+                    
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {textOverlays.length === 0 ? (
+                        <div className="text-center py-6">
+                          <div className="w-12 h-12 mx-auto mb-3 bg-[#111] rounded-full flex items-center justify-center border border-[#333]">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                            </svg>
+                          </div>
+                          <p className="text-white/50 text-sm">No text overlays</p>
+                          <p className="text-white/30 text-xs mt-1">Click "Add Text Overlay" to get started</p>
+                        </div>
+                      ) : (
+                        textOverlays.map((overlay) => (
+                          <div
+                            key={overlay.id}
+                            className="bg-[#111] border border-[#333] rounded-lg p-3 hover:bg-[#333] transition-colors"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-white truncate">
+                                  📝 {overlay.text}
+                                </div>
+                                <div className="text-xs text-white/50 mt-1">
+                                  {formatTime(overlay.startTime)} - {formatTime(overlay.endTime)}
+                                </div>
+                                <div className="text-xs text-white/40">
+                                  Position: {overlay.position} • Size: {overlay.fontSize}px
+                                </div>
+                              </div>
+                              <div className="flex space-x-1 ml-2">
+                                <button
+                                  onClick={() => openTextOverlayModal(overlay)}
+                                  className="text-blue-400 hover:text-blue-300 transition-colors p-1"
+                                  title="Edit overlay"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteTextOverlay(overlay.id)}
+                                  className="text-red-400 hover:text-red-300 transition-colors p-1"
+                                  title="Delete overlay"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}
@@ -1565,6 +2713,15 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
                       </svg>
                       AI Prompt
                   </button>
+                  <button 
+                      onClick={() => openTextOverlayModal()}
+                      className="w-full px-3 py-2 bg-yellow-600/20 text-yellow-400 rounded-lg text-sm hover:bg-yellow-600/30 transition-colors flex items-center justify-center gap-2 border border-yellow-600/30"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                      </svg>
+                      Add Text
+                  </button>
                 </div>
               </div>
             </div>
@@ -1589,6 +2746,104 @@ function EditorPageContent({ promptParam, projectIdParam }: { promptParam: strin
             initialTitle={projectTitle}
             initialDescription={projectDescription}
           />
+          
+          {/* Auto-save notification */}
+          {showAutoSaveNotification && (
+            <div className="fixed top-4 right-4 bg-green-600 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 animate-in slide-in-from-right">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <div className="font-medium">Timeline Restored</div>
+                <div className="text-sm text-green-100">Auto-saved progress loaded successfully</div>
+              </div>
+              <button 
+                onClick={() => setShowAutoSaveNotification(false)}
+                className="ml-2 text-green-200 hover:text-white"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* Text Overlay Modal */}
+          {showTextOverlayModal && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+              <div className="bg-[#222] border border-[#333] rounded-lg p-6 w-full max-w-md">
+                <h2 className="text-lg font-semibold text-white mb-4">{editingOverlay ? 'Edit' : 'Add'} Text Overlay</h2>
+                <form onSubmit={e => { e.preventDefault(); handleSaveTextOverlay(); }}>
+                  <label className="block text-xs text-white/50 mb-1">Text</label>
+                  <input
+                    className="w-full mb-3 px-3 py-2 rounded bg-[#111] border border-[#333] text-white placeholder:text-white/40"
+                    value={editingOverlayDraft.text || ''}
+                    onChange={e => setEditingOverlayDraft(d => ({ ...d, text: e.target.value }))}
+                    placeholder="Enter text to display..."
+                    style={{ color: '#ffffff' }}
+                    required
+                  />
+                  <div className="flex space-x-2 mb-3">
+                    <div className="flex-1">
+                      <label className="block text-xs text-white/50 mb-1">Start Time (s)</label>
+                      <input
+                        type="number"
+                        className="w-full px-2 py-1 rounded bg-[#111] border border-[#333] text-white placeholder:text-white/40"
+                        value={editingOverlayDraft.startTime ?? 0}
+                        min={0}
+                        onChange={e => setEditingOverlayDraft(d => ({ ...d, startTime: Number(e.target.value) }))}
+                        style={{ color: '#ffffff' }}
+                        required
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs text-white/50 mb-1">End Time (s)</label>
+                      <input
+                        type="number"
+                        className="w-full px-2 py-1 rounded bg-[#111] border border-[#333] text-white placeholder:text-white/40"
+                        value={editingOverlayDraft.endTime ?? 0}
+                        min={0}
+                        onChange={e => setEditingOverlayDraft(d => ({ ...d, endTime: Number(e.target.value) }))}
+                        style={{ color: '#ffffff' }}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="flex space-x-2 mb-4">
+                    <div className="flex-1">
+                      <label className="block text-xs text-white/50 mb-1">Position</label>
+                      <select
+                        className="w-full px-2 py-1 rounded bg-[#111] border border-[#333] text-white"
+                        value={editingOverlayDraft.position || 'center'}
+                        onChange={e => setEditingOverlayDraft(d => ({ ...d, position: e.target.value as 'top' | 'center' | 'bottom' }))}
+                        style={{ color: '#ffffff' }}
+                      >
+                        <option value="top">Top</option>
+                        <option value="center">Center</option>
+                        <option value="bottom">Bottom</option>
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs text-white/50 mb-1">Font Size</label>
+                      <input
+                        type="number"
+                        className="w-full px-2 py-1 rounded bg-[#111] border border-[#333] text-white placeholder:text-white/40"
+                        value={editingOverlayDraft.fontSize ?? 32}
+                        min={8}
+                        max={128}
+                        onChange={e => setEditingOverlayDraft(d => ({ ...d, fontSize: Number(e.target.value) }))}
+                        style={{ color: '#ffffff' }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end space-x-2">
+                    <button type="button" className="px-4 py-2 bg-[#333] text-white rounded hover:bg-[#444]" onClick={() => { setShowTextOverlayModal(false); setEditingOverlay(null); }}>Cancel</button>
+                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

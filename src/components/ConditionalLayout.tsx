@@ -11,7 +11,7 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
   const pathname = usePathname()
   
   // Pages that should NOT show the navbar
-  const noNavbarPages = ["/", "/login", "/signup"]
+  const noNavbarPages = ["/", "/login", "/signup", "/projects", "/editor"]
   
   const shouldShowNavbar = pathname ? !noNavbarPages.includes(pathname) : false
 

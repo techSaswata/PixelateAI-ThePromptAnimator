@@ -68,7 +68,7 @@ chat_history = []
 MAX_HISTORY_LENGTH = 20
 
 # Path to short prompting examples
-EXAMPLES_DIR = os.path.join(os.path.dirname(__file__), "shot_promting", "examples")
+EXAMPLES_DIR = "examples"
 
 
 def add_message_to_history(message):
@@ -1209,12 +1209,39 @@ def check_for_exact_example_match(prompt: str, examples: list) -> str:
     
     prompt_lower = prompt.lower()
     
-    # Define exact matches
+    # Define exact matches for all available examples
     exact_matches = {
+        # Sorting algorithms
+        'bubble sort': 'bubble sort',
+        'bubblesort': 'bubble sort',
+        'merge sort': 'merge sort', 
+        'mergesort': 'merge sort',
+        
+        # Data structures
+        'linked list': 'linkedlist',
+        'linkedlist': 'linkedlist',
+        'traversal in linkedlist': 'linkedlist',
+        'linkedlist traversal': 'linkedlist',
+        
+        # Graph algorithms
         'dijkstra': 'dijkstra',
-        'level order': 'level',
+        "dijkstra's algorithm": 'dijkstra',
+        'dijkstra algorithm': 'dijkstra',
+        'shortest path': 'dijkstra',
+        
+        # Tree algorithms
+        'level order': 'level-order',
+        'level order traversal': 'level-order',
+        'level-order traversal': 'level-order',
+        'breadth first': 'level-order',
+        'bfs': 'level-order',
+        
+        # Mathematical theorems
         'pythagorean': 'pythagorean',
-        'pythagoras': 'pythagorean'
+        'pythagoras': 'pythagorean',
+        'pythagorean theorem': 'pythagorean',
+        'pythagorean proof': 'pythagorean',
+        'right triangle': 'pythagorean'
     }
     
     # Check for exact matches

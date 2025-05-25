@@ -44,7 +44,8 @@ export default function LandingPage() {
               <input
                 type="text"
                 placeholder="Search animations..."
-                className="w-64 px-3 py-1.5 bg-[#111] border border-[#333] rounded-lg text-sm text-white/70 focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+                className="w-64 px-3 py-1.5 bg-[#111] border border-[#333] rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent placeholder:text-white/40"
+                style={{ color: '#ffffff' }}
               />
               <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-white/40 border border-[#333] rounded px-1.5 py-0.5">
                 /

@@ -2,16 +2,146 @@
 
 Transform complex mathematical concepts into beautiful, engaging animations using simple text prompts. No coding or animation experience required.
 
+## 🏗️ System Architecture
+
+PixelateAI is built with a modern, scalable architecture that leverages cutting-edge AI and cloud technologies:
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Next.js UI   │────│   Supabase Auth  │────│  FastAPI Server │
+│   (Frontend)    │    │   & Database     │    │   (Backend)     │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│  Video Editor   │    │ Supabase Storage │    │   OpenAI GPT    │
+│   & Timeline    │    │   (Video Bucket) │    │ (Code Generator)│
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Manim Engine  │    │   Pinecone DB    │    │   Video Embed   │
+│ (Python Render) │    │ (Vector Storage) │    │   Processing    │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+```
+
+## 🛠️ Complete Tech Stack
+
+### 🎨 Frontend Layer
+- **Next.js 14** - React framework with App Router and TypeScript
+- **Tailwind CSS** - Modern utility-first styling framework
+- **React Context** - State management for authentication and app state
+- **Supabase Client** - Real-time database and authentication integration
+
+### 🔐 Authentication & Database
+- **Supabase Auth** - Secure user authentication with email/password and social logins
+- **Supabase Database** - PostgreSQL database for user data, projects, and metadata
+- **Row Level Security** - Database-level security policies for data protection
+
+### 🤖 AI & Code Generation
+- **OpenAI GPT-4** - Advanced language model for generating optimized Manim Python code
+- **Custom Prompts** - Specialized prompt engineering for mathematical animation generation
+- **Code Validation** - Automated syntax checking and optimization of generated code
+
+### ⚡ Backend Services
+- **FastAPI** - High-performance Python web framework for API endpoints
+- **Python Manim Library** - Mathematical animation engine for rendering videos
+- **Async Processing** - Non-blocking video generation and processing
+- **RESTful APIs** - Clean, documented API endpoints for frontend integration
+
+### 📹 Video Processing & Storage
+- **Supabase Storage Bucket** - Scalable cloud storage for video files and thumbnails
+- **Video Embedding** - Advanced video processing and metadata extraction
+- **CDN Integration** - Fast global video delivery through Supabase CDN
+- **Format Optimization** - Automatic video compression and format conversion
+
+### 🔍 Vector Database & Search
+- **Pinecone** - Vector database for storing video hashes and embeddings
+- **Semantic Search** - AI-powered search through animation library
+- **Duplicate Detection** - Hash-based duplicate video detection and deduplication
+- **Content Indexing** - Automatic indexing of video content for fast retrieval
+
+### 🎬 Video Editor Features
+- **Timeline Editor** - Drag-and-drop video editing interface
+- **Voice Recording** - Built-in voice-over recording and audio processing
+- **Text Overlays** - Dynamic text overlay system with positioning and timing
+- **Auto-Save** - Automatic project saving every 5 seconds
+- **Video Splitting** - Precise video cutting and trimming tools
+- **Clip Management** - Advanced clip selection, deletion, and organization
+
+## 🚀 Data Flow Architecture
+
+### 1. **User Authentication Flow**
+```
+User Input → Supabase Auth → JWT Token → Protected Routes → Dashboard
+```
+
+### 2. **Animation Generation Pipeline**
+```
+Text Prompt → OpenAI GPT-4 → Manim Code → FastAPI → Python Execution → Video File
+```
+
+### 3. **Video Storage & Retrieval**
+```
+Generated Video → Supabase Bucket → CDN → Video URL → Frontend Display
+```
+
+### 4. **Vector Search & Indexing**
+```
+Video Content → Embedding Generation → Pinecone Storage → Semantic Search → Results
+```
+
+### 5. **Editor Workflow**
+```
+Video Upload → Timeline Addition → Audio Recording → Text Overlays → Export
+```
+
+## 🔧 Core Technologies Deep Dive
+
+### **Supabase Integration**
+- **Authentication**: Email/password, magic links, and OAuth providers
+- **Database**: Real-time PostgreSQL with automatic API generation
+- **Storage**: Scalable file storage with automatic CDN distribution
+- **Real-time**: Live updates for collaborative editing features
+
+### **OpenAI API Integration**
+- **Model**: GPT-4 for superior code generation quality
+- **Prompt Engineering**: Specialized prompts for mathematical concepts
+- **Token Optimization**: Efficient API usage with response caching
+- **Error Handling**: Robust fallback mechanisms for API failures
+
+### **FastAPI Backend**
+- **Async Operations**: Non-blocking video processing and generation
+- **Dependency Injection**: Clean, testable code architecture
+- **Automatic Documentation**: OpenAPI/Swagger integration
+- **CORS Configuration**: Secure cross-origin resource sharing
+
+### **Manim Engine**
+- **Python Integration**: Direct Python library execution
+- **Quality Control**: Multiple rendering quality options
+- **Format Support**: MP4, GIF, and PNG sequence output
+- **Performance Optimization**: Efficient rendering pipeline
+
+### **Pinecone Vector Database**
+- **High-Dimensional Vectors**: Store complex video embeddings
+- **Fast Similarity Search**: Sub-second search across millions of vectors
+- **Metadata Filtering**: Advanced filtering by video properties
+- **Scalable Infrastructure**: Auto-scaling based on usage
+
 ## 🚀 Complete Architecture
 
-PixelateAI follows this workflow:
+PixelateAI follows this comprehensive workflow:
 
-1. **User Prompt** → Enter mathematical concept description
-2. **LLM (OpenAI GPT)** → Generates optimized Manim Python code
-3. **Code Generation** → Creates professional animation scripts
-4. **Manim Rendering** → Converts code to video (local/server)
-5. **Video Editor** → Edit, add voice-over, overlays
-6. **Export/Publish** → Share your educational content
+1. **User Authentication** → Secure login via Supabase Auth
+2. **Prompt Input** → User describes mathematical concept
+3. **AI Code Generation** → OpenAI GPT-4 generates optimized Manim code
+4. **Video Rendering** → FastAPI executes Python Manim library
+5. **Storage & CDN** → Videos stored in Supabase bucket with CDN delivery
+6. **Vector Indexing** → Video hashes and embeddings stored in Pinecone
+7. **Video Editor** → Advanced editing with timeline, audio, and overlays
+8. **Export & Share** → Final video export and sharing capabilities
 
 ## ✨ Features
 
@@ -21,20 +151,25 @@ PixelateAI follows this workflow:
 - 📱 **Modern UI**: Beautiful, responsive interface built with Next.js
 - 🐍 **Manim Integration**: Professional-quality mathematical visualizations
 - 💾 **Code Export**: Download generated Python code for local rendering
+- 🎬 **Video Editor**: Advanced timeline editor with voice recording and text overlays
+- 🔍 **Smart Search**: AI-powered video search and duplicate detection
+- ☁️ **Cloud Storage**: Scalable video storage with global CDN delivery
 
-## 🛠️ Tech Stack
+## 🛠️ Quick Tech Overview
 
 ### Frontend
-- **Next.js 14** - React framework with App Router
-- **TypeScript** - Type-safe development
-- **Tailwind CSS** - Modern styling
-- **Supabase Client** - Authentication and database
+- **Next.js 14** with TypeScript and Tailwind CSS
+- **Supabase Client** for authentication and real-time features
 
-### Backend
-- **FastAPI** - High-performance Python API
-- **OpenAI GPT-4** - Code generation
-- **Pinecone** - Vector database for knowledge retrieval
-- **Manim** - Mathematical animation engine
+### Backend  
+- **FastAPI** with Python for high-performance API
+- **OpenAI GPT-4** for intelligent code generation
+- **Manim** for mathematical animation rendering
+
+### Infrastructure
+- **Supabase** for auth, database, and file storage
+- **Pinecone** for vector search and video indexing
+- **CDN** for fast global video delivery
 
 ## 🚀 Quick Start
 
@@ -152,13 +287,36 @@ manim animation.py Scene -qm --preview
 
 ## 🎯 Example Prompts
 
-Try these educational prompts:
+Try these educational prompts with our comprehensive example library:
 
+### 🔢 **Sorting Algorithms**
+- **Bubble Sort**: "Explain bubble sort algorithm step by step"
+- **Merge Sort**: "Show merge sort using divide and conquer approach"
+
+### 🔗 **Data Structures**
+- **Linked List**: "Explain traversal in linkedlist"
+- **Binary Trees**: "Demonstrate level order traversal in binary tree"
+
+### 📊 **Graph Algorithms**
+- **Dijkstra's Algorithm**: "Explain Dijkstra's algorithm for shortest path"
+- **Graph Traversal**: "Show breadth-first search visualization"
+
+### 📐 **Mathematical Theorems**
+- **Pythagorean Theorem**: "Prove the Pythagorean theorem with visual demonstration"
+- **Geometric Proofs**: "Show how a² + b² = c² using squares on triangle sides"
+
+### 🧮 **Advanced Topics**
 - **Algebra**: "Visualize solving a quadratic equation step by step"
 - **Geometry**: "Show how the area of a circle is derived using π"
 - **Calculus**: "Animate the concept of limits approaching infinity"
 - **Linear Algebra**: "Demonstrate matrix multiplication visually"
 - **Statistics**: "Show the central limit theorem with multiple distributions"
+
+### 💡 **Pro Tips for Better Results**
+- Use specific algorithm names for exact matches (e.g., "Dijkstra's Algorithm")
+- Include "step by step" for detailed explanations
+- Mention "visualize" or "explain" for educational content
+- Reference specific mathematical concepts for theorem proofs
 
 ## 🔧 Development
 
@@ -172,6 +330,8 @@ pixelateai/
 │   └── lib/              # Utilities
 ├── backend/               # FastAPI backend
 │   ├── app/              # Backend modules
+│   ├── shot_promting/    # Example-based generation
+│   │   └── examples/     # Algorithm examples
 │   ├── requirements.txt  # Python dependencies
 │   └── run.py           # Server startup
 ├── manim_test.py         # Local testing script
@@ -238,4 +398,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Made with ❤️ for educators and students worldwide** 
+**Made with ❤️ for educators and students worldwide**
