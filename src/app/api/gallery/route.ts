@@ -1,43 +1,58 @@
 import { NextResponse } from 'next/server';
+import { getVideosFromSupabase } from '@/lib/supabase';
 
 export async function GET() {
   try {
-    // Fetch videos from the backend Pinecone API
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
-    const response = await fetch(`${backendUrl}/api/gallery/videos`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // Add cache control to ensure fresh data
-      cache: 'no-store'
-    });
-
-    if (!response.ok) {
-      throw new Error(`Backend API responded with status: ${response.status}`);
-    }
-
-    const data = await response.json();
+    console.log('Gallery API: Fetching videos directly from Supabase...');
     
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to fetch videos from backend');
-    }
+    // Fetch videos directly from Supabase storage
+    const videos = await getVideosFromSupabase();
+    
+    console.log(`Gallery API: Found ${videos.length} videos in Supabase`);
 
     return NextResponse.json({
       success: true,
-      videos: data.videos || [],
-      total: data.total || 0
+      videos: videos,
+      total: videos.length,
+      source: 'supabase-direct'
     });
 
   } catch (error) {
-    console.error('Error fetching gallery videos:', error);
+    console.error('Gallery API: Error fetching videos from Supabase:', error);
     
-    // Return empty array instead of error to gracefully handle failures
+    // Fallback: Try to fetch from backend as backup
+    try {
+      console.log('Gallery API: Trying backend fallback...');
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+      const response = await fetch(`${backendUrl}/api/gallery/videos`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Gallery API: Backend fallback successful');
+        return NextResponse.json({
+          success: true,
+          videos: data.videos || [],
+          total: data.total || 0,
+          source: 'backend-fallback'
+        });
+      }
+    } catch (backendError) {
+      console.error('Gallery API: Backend fallback also failed:', backendError);
+    }
+    
+    // Return empty array with error info
     return NextResponse.json({
       success: true,
       videos: [],
       total: 0,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      source: 'error'
     });
   }
 } 

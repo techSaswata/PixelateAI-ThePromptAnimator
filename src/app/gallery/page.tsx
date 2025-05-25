@@ -13,6 +13,7 @@ interface Video {
   category: string;
   duration: string;
   thumbnail?: string;
+  source?: string;
 }
 
 // Categories for filtering
@@ -37,18 +38,38 @@ export default function GalleryPage() {
     const fetchVideos = async () => {
       try {
         setLoading(true);
+        console.log('🔄 Fetching videos from gallery API...');
+        
         const response = await fetch('/api/gallery');
         const data = await response.json();
         
+        console.log('📊 Gallery API response:', {
+          success: data.success,
+          total: data.total,
+          source: data.source,
+          videosCount: data.videos?.length || 0,
+          error: data.error
+        });
+        
         if (data.success) {
+          console.log('✅ Videos fetched successfully:', data.videos?.length || 0);
+          if (data.videos?.length > 0) {
+            console.log('📹 First video sample:', {
+              id: data.videos[0].id,
+              title: data.videos[0].title,
+              video_url: data.videos[0].video_url,
+              source: data.videos[0].source
+            });
+          }
           setVideos(data.videos || []);
           setError(null);
         } else {
+          console.error('❌ API returned error:', data.error);
           setError(data.error || 'Failed to fetch videos');
         }
       } catch (err) {
+        console.error('💥 Network error fetching videos:', err);
         setError('Failed to connect to API');
-        console.error('Error fetching videos:', err);
       } finally {
         setLoading(false);
       }
@@ -60,15 +81,16 @@ export default function GalleryPage() {
   // Test video accessibility when videos are loaded
   useEffect(() => {
     if (videos.length > 0) {
-      console.log('Testing video accessibility...');
+      console.log('🧪 Testing video accessibility for', videos.length, 'videos...');
       videos.forEach(video => {
-        const testUrl = `${backendUrl}${video.video_url}`;
-        console.log(`Testing video: ${video.title} -> ${testUrl}`);
-        console.log('Video data:', {
-          id: video.id,
-          video_url: video.video_url,
-          full_constructed_url: testUrl
-        });
+        // For Supabase direct URLs, use the video_url as-is
+        const testUrl = video.video_url.startsWith('http') 
+          ? video.video_url 
+          : `${backendUrl}${video.video_url}`;
+          
+        console.log(`🎬 Testing video: ${video.title}`);
+        console.log(`   📍 URL: ${testUrl}`);
+        console.log(`   🏷️  Source: ${video.source || 'unknown'}`);
         
         // Create a test video element to check if the video loads
         const testVideo = document.createElement('video');
@@ -206,13 +228,13 @@ export default function GalleryPage() {
 
   // Helper function to play specific video
   const playVideo = (videoId: string) => {
-    console.log('Attempting to play video:', videoId);
+    console.log('🎬 Attempting to play video:', videoId);
     
     // First pause all other videos
     const allVideos = document.querySelectorAll('video');
     allVideos.forEach((video) => {
       if (!video.paused) {
-        console.log('Pausing other video:', video.getAttribute('data-video-id'));
+        console.log('⏸️ Pausing other video:', video.getAttribute('data-video-id'));
         video.pause();
       }
     });
@@ -220,19 +242,17 @@ export default function GalleryPage() {
     // Then play the target video
     const targetVideo = document.querySelector(`[data-video-id="${videoId}"]`) as HTMLVideoElement;
     if (targetVideo) {
-      const expectedSrc = `${backendUrl}/api/videos/${videoId}.mp4`;
-      console.log('Found target video element:', {
+      console.log('📊 Found target video element:', {
         currentSrc: targetVideo.src,
-        expectedSrc: expectedSrc,
         readyState: targetVideo.readyState,
         networkState: targetVideo.networkState,
         error: targetVideo.error,
-        hasSource: targetVideo.querySelector('source')?.src
+        paused: targetVideo.paused
       });
       
       // Reset video if needed
       if (targetVideo.error) {
-        console.warn('Video had error, reloading:', targetVideo.error);
+        console.warn('⚠️ Video had error, reloading:', targetVideo.error);
         targetVideo.load();
       }
       
@@ -241,8 +261,8 @@ export default function GalleryPage() {
       
       targetVideo.play()
         .then(() => {
-          console.log('Video playing successfully:', videoId);
-          console.log('Video element state after play:', {
+          console.log('✅ Video playing successfully:', videoId);
+          console.log('📊 Video element state after play:', {
             paused: targetVideo.paused,
             currentTime: targetVideo.currentTime,
             duration: targetVideo.duration,
@@ -253,23 +273,23 @@ export default function GalleryPage() {
           handleVideoPlay(videoId);
         })
         .catch((error) => {
-          console.error('Error playing video:', videoId, error);
+          console.error('❌ Error playing video:', videoId, error);
           
           // Try loading the video first if it failed
           if (targetVideo.readyState === 0) {
-            console.log('Video not loaded, attempting to load first...');
+            console.log('🔄 Video not loaded, attempting to load first...');
             targetVideo.load();
             
             targetVideo.addEventListener('loadeddata', () => {
-              console.log('Video loaded, retrying play...');
+              console.log('🔄 Video loaded, retrying play...');
               targetVideo.muted = true;
               targetVideo.play()
                 .then(() => {
-                  console.log('Video playing after reload:', videoId);
+                  console.log('✅ Video playing after reload:', videoId);
                   handleVideoPlay(videoId);
                 })
                 .catch((retryError) => {
-                  console.error('Video still failed after reload:', retryError);
+                  console.error('❌ Video still failed after reload:', retryError);
                   handleVideoError(videoId);
                 });
             }, { once: true });
@@ -278,7 +298,7 @@ export default function GalleryPage() {
           }
         });
     } else {
-      console.error('Could not find video element for ID:', videoId);
+      console.error('❌ Could not find video element for ID:', videoId);
     }
   };
 
@@ -372,33 +392,29 @@ export default function GalleryPage() {
                 crossOrigin="anonymous"
                 muted={true}
                 playsInline
-                src={`${backendUrl}${video.video_url}`}
+                src={video.video_url.startsWith('http') ? video.video_url : `${backendUrl}${video.video_url}`}
                 style={{ minHeight: '200px' }}
                 onPlay={() => handleVideoPlay(video.id)}
                 onPause={handleVideoPause}
                 onEnded={handleVideoPause}
                 onLoadedData={() => {
-                  console.log('Video loaded successfully:', video.id);
-                  console.log('Video element details:', {
+                  console.log('✅ Video loaded successfully:', video.id);
+                  console.log('📊 Video element details:', {
                     id: video.id,
+                    src: (document.querySelector(`[data-video-id="${video.id}"]`) as HTMLVideoElement)?.src,
+                    readyState: (document.querySelector(`[data-video-id="${video.id}"]`) as HTMLVideoElement)?.readyState,
                     videoWidth: (document.querySelector(`[data-video-id="${video.id}"]`) as HTMLVideoElement)?.videoWidth,
                     videoHeight: (document.querySelector(`[data-video-id="${video.id}"]`) as HTMLVideoElement)?.videoHeight,
-                    clientWidth: (document.querySelector(`[data-video-id="${video.id}"]`) as HTMLVideoElement)?.clientWidth,
-                    clientHeight: (document.querySelector(`[data-video-id="${video.id}"]`) as HTMLVideoElement)?.clientHeight,
-                    offsetWidth: (document.querySelector(`[data-video-id="${video.id}"]`) as HTMLVideoElement)?.offsetWidth,
-                    offsetHeight: (document.querySelector(`[data-video-id="${video.id}"]`) as HTMLVideoElement)?.offsetHeight,
-                    src: (document.querySelector(`[data-video-id="${video.id}"]`) as HTMLVideoElement)?.src,
-                    readyState: (document.querySelector(`[data-video-id="${video.id}"]`) as HTMLVideoElement)?.readyState
                   });
                   handleVideoLoadSuccess(video.id);
                 }}
                 onCanPlay={() => {
-                  console.log('Video can play:', video.id);
+                  console.log('✅ Video can play:', video.id);
                   handleVideoLoadSuccess(video.id);
                 }}
                 onError={(e) => {
                   const target = e.target as HTMLVideoElement;
-                  console.error('Video error for', video.id, ':', {
+                  console.error('❌ Video error for', video.id, ':', {
                     error: target.error,
                     networkState: target.networkState,
                     readyState: target.readyState,
