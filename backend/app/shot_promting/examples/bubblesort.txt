@@ -1,0 +1,251 @@
+
+USER: explain bubble sort  /
+ASSISTANT:
+bubble sort is a sorting alogorithm
+
+
+``` python
+
+from manim import *
+
+class BubbleSort(Scene):
+    def construct(self):
+        # Title
+        title = Text("Bubble Sort", font_size=48, color=GREEN)
+        title.to_edge(UP)
+        self.play(Write(title))
+        
+        # Initial array [5, 6, 1, 3] - exactly from the images
+        array = [5, 6, 1, 3]
+        
+        # Create array visualization
+        self.create_array_visualization(array)
+        
+        # Step 01: Placing the 1st largest element at its correct position
+        self.step_01(array)
+        
+        # Step 02: Placing 2nd largest element at its correct position  
+        self.step_02(array)
+        
+        # Step 03: Placing 3rd largest element at its correct position
+        self.step_03(array)
+        
+        # Show final sorted array
+        self.show_final_result()
+        
+        self.wait(2)
+    
+    def create_array_visualization(self, array):
+        self.rectangles = []
+        self.numbers = []
+        
+        # Create rectangles and numbers
+        for i, value in enumerate(array):
+            rect = Rectangle(width=1.2, height=0.8, color=WHITE, fill_opacity=0.3)
+            rect.move_to(LEFT * 2.5 + RIGHT * i * 1.8)
+            
+            num = Text(str(value), font_size=32, color=WHITE)
+            num.move_to(rect.get_center())
+            
+            self.rectangles.append(rect)
+            self.numbers.append(num)
+        
+        # Show initial array
+        self.play(*[Create(rect) for rect in self.rectangles])
+        self.play(*[Write(num) for num in self.numbers])
+        self.wait(1)
+    
+    def step_01(self, array):
+        # Step 01 title
+        step_title = Text("01 | Placing the 1st largest element at its correct position", 
+                         font_size=24, color=GREEN)
+        step_title.move_to(UP * 2.5)
+        self.play(Write(step_title))
+        
+        # i=0 label
+        i_label = Text("i=0", font_size=20, color=GRAY)
+        i_label.next_to(self.rectangles[0], UP, buff=0.3)
+        self.play(Write(i_label))
+        
+        # Compare 5 and 6 (i=0): No swap
+        self.highlight_comparison(0, 1)
+        no_swap_text = Text("No Swap", font_size=18, color=GRAY)
+        no_swap_text.next_to(self.rectangles[1], DOWN, buff=0.8)
+        self.play(Write(no_swap_text))
+        self.wait(1)
+        self.play(FadeOut(no_swap_text))
+        self.remove_highlight(0, 1)
+        
+        # Update i=1
+        new_i_label = Text("i=1", font_size=20, color=GRAY)
+        new_i_label.next_to(self.rectangles[1], UP, buff=0.3)
+        self.play(Transform(i_label, new_i_label))
+        
+        # Compare 6 and 1 (i=1): Swap
+        self.highlight_comparison(1, 2)
+        swap_text = Text("Swap", font_size=18, color=RED)
+        swap_text.next_to(self.rectangles[2], DOWN, buff=0.8)
+        self.play(Write(swap_text))
+        self.swap_elements(1, 2, array)
+        self.play(FadeOut(swap_text))
+        self.remove_highlight(1, 2)
+        
+        # Update i=2  
+        new_i_label2 = Text("i=2", font_size=20, color=GRAY)
+        new_i_label2.next_to(self.rectangles[2], UP, buff=0.3)
+        self.play(Transform(i_label, new_i_label2))
+        
+        # Compare 6 and 3 (i=2): Swap
+        self.highlight_comparison(2, 3)
+        swap_text2 = Text("Swap", font_size=18, color=RED)
+        swap_text2.next_to(self.rectangles[3], DOWN, buff=0.8)
+        self.play(Write(swap_text2))
+        self.swap_elements(2, 3, array)
+        self.play(FadeOut(swap_text2))
+        self.remove_highlight(2, 3)
+        
+        # Mark 6 as sorted
+        self.mark_as_sorted(3)
+        self.play(FadeOut(i_label))
+        self.play(FadeOut(step_title))
+        self.wait(1)
+    
+    def step_02(self, array):
+        # Step 02 title
+        step_title = Text("02 | Placing 2nd largest element at its correct position", 
+                         font_size=24, color=GREEN)
+        step_title.move_to(UP * 2.5)
+        self.play(Write(step_title))
+        
+        # i=0 label
+        i_label = Text("i=0", font_size=20, color=GRAY)
+        i_label.next_to(self.rectangles[0], UP, buff=0.3)
+        self.play(Write(i_label))
+        
+        # Compare 5 and 1 (i=0): Swap
+        self.highlight_comparison(0, 1)
+        swap_text = Text("Swap", font_size=18, color=RED)
+        swap_text.next_to(self.rectangles[1], DOWN, buff=0.8)
+        self.play(Write(swap_text))
+        self.swap_elements(0, 1, array)
+        self.play(FadeOut(swap_text))
+        self.remove_highlight(0, 1)
+        
+        # Update i=1
+        new_i_label = Text("i=1", font_size=20, color=GRAY)
+        new_i_label.next_to(self.rectangles[1], UP, buff=0.3)
+        self.play(Transform(i_label, new_i_label))
+        
+        # Compare 5 and 3 (i=1): Swap  
+        self.highlight_comparison(1, 2)
+        swap_text2 = Text("Swap", font_size=18, color=RED)
+        swap_text2.next_to(self.rectangles[2], DOWN, buff=0.8)
+        self.play(Write(swap_text2))
+        self.swap_elements(1, 2, array)
+        self.play(FadeOut(swap_text2))
+        self.remove_highlight(1, 2)
+        
+        # Mark 5 as sorted
+        self.mark_as_sorted(2)
+        self.play(FadeOut(i_label))
+        self.play(FadeOut(step_title))
+        self.wait(1)
+    
+    def step_03(self, array):
+        # Step 03 title
+        step_title = Text("03 | Placing 3rd largest element at its correct position", 
+                         font_size=24, color=GREEN)
+        step_title.move_to(UP * 2.5)
+        self.play(Write(step_title))
+        
+        # i=0 label
+        i_label = Text("i=0", font_size=20, color=GRAY)
+        i_label.next_to(self.rectangles[0], UP, buff=0.3)
+        self.play(Write(i_label))
+        
+        # Compare 1 and 3 (i=0): No swap
+        self.highlight_comparison(0, 1)
+        no_swap_text = Text("No Swap", font_size=18, color=GRAY)
+        no_swap_text.next_to(self.rectangles[1], DOWN, buff=0.8)
+        self.play(Write(no_swap_text))
+        self.wait(1)
+        self.play(FadeOut(no_swap_text))
+        self.remove_highlight(0, 1)
+        
+        # Mark remaining elements as sorted
+        self.mark_as_sorted(1)
+        self.mark_as_sorted(0)
+        self.play(FadeOut(i_label))
+        self.play(FadeOut(step_title))
+        self.wait(1)
+    
+    def show_final_result(self):
+        # Show "Sorted Elements" label
+        sorted_label = Text("Sorted Elements", font_size=24, color=GREEN)
+        sorted_label.move_to(DOWN * 2.5)
+        arrow_left = Arrow(sorted_label.get_top() + LEFT * 1.5, 
+                          self.rectangles[0].get_bottom() + DOWN * 0.2, color=GREEN)
+        arrow_right = Arrow(sorted_label.get_top() + RIGHT * 1.5, 
+                           self.rectangles[-1].get_bottom() + DOWN * 0.2, color=GREEN)
+        
+        self.play(Write(sorted_label))
+        self.play(Create(arrow_left), Create(arrow_right))
+    
+    def highlight_comparison(self, i, j):
+        """Highlight two elements being compared"""
+        self.rectangles[i].set_fill(PINK, opacity=0.7)
+        self.rectangles[j].set_fill(PINK, opacity=0.7)
+        self.wait(0.5)
+    
+    def remove_highlight(self, i, j):
+        """Remove highlight from elements"""
+        self.rectangles[i].set_fill(WHITE, opacity=0.3)
+        self.rectangles[j].set_fill(WHITE, opacity=0.3)
+    
+    def swap_elements(self, i, j, array):
+        """Animate swapping two elements"""
+        # Swap in array
+        array[i], array[j] = array[j], array[i]
+        
+        # Get current positions
+        rect1_center = self.rectangles[i].get_center()
+        rect2_center = self.rectangles[j].get_center()
+        
+        # Animate swap with clear paths
+        self.play(
+            self.rectangles[i].animate.shift(UP * 1.2),
+            self.numbers[i].animate.shift(UP * 1.2),
+            self.rectangles[j].animate.shift(DOWN * 1.2),
+            self.numbers[j].animate.shift(DOWN * 1.2),
+            run_time=0.5
+        )
+        
+        self.play(
+            self.rectangles[i].animate.move_to(rect2_center + UP * 1.2),
+            self.numbers[i].animate.move_to(rect2_center + UP * 1.2),
+            self.rectangles[j].animate.move_to(rect1_center + DOWN * 1.2),
+            self.numbers[j].animate.move_to(rect1_center + DOWN * 1.2),
+            run_time=0.6
+        )
+        
+        self.play(
+            self.rectangles[i].animate.move_to(rect2_center),
+            self.numbers[i].animate.move_to(rect2_center),
+            self.rectangles[j].animate.move_to(rect1_center),
+            self.numbers[j].animate.move_to(rect1_center),
+            run_time=0.5
+        )
+        
+        # Swap references
+        self.rectangles[i], self.rectangles[j] = self.rectangles[j], self.rectangles[i]
+        self.numbers[i], self.numbers[j] = self.numbers[j], self.numbers[i]
+    
+    def mark_as_sorted(self, index):
+        """Mark an element as sorted"""
+        self.play(
+            self.rectangles[index].animate.set_fill(GREEN, opacity=0.5).set_stroke(GREEN, width=3),
+            run_time=0.5
+        )
+
+
+```

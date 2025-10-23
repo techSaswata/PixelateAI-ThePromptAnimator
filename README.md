@@ -207,6 +207,11 @@ npm run dev
 ```bash
 cd backend
 pip3 install -r requirements-minimal.txt
+# Kill existing backend
+lsof -ti:5001 | xargs kill -9
+
+# Run backend
+cd backend && source venv/bin/activate && python run.py
 ```
 
 Create environment file:
