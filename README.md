@@ -28,6 +28,7 @@ PixelateAI is built with a modern, scalable architecture that leverages cutting-
 ```
 
 ## Tutorial Video:
+https://github.com/user-attachments/assets/1829b854-5eeb-4648-8ea4-eb265bf1009d
 
 ## 🛠️ Complete Tech Stack
 
