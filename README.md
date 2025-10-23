@@ -15,7 +15,7 @@ PixelateAI is built with a modern, scalable architecture that leverages cutting-
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│  Video Editor   │    │ Supabase Storage │    │   OpenAI GPT    │
+│  Video Editor   │    │ Supabase Storage │    │      Gemini     │
 │   & Timeline    │    │   (Video Bucket) │    │ (Code Generator)│
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
