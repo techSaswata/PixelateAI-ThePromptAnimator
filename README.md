@@ -27,6 +27,8 @@ PixelateAI is built with a modern, scalable architecture that leverages cutting-
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
+## Tutorial Video:
+
 ## 🛠️ Complete Tech Stack
 
 ### 🎨 Frontend Layer
@@ -98,38 +100,6 @@ Video Content → Embedding Generation → Pinecone Storage → Semantic Search 
 Video Upload → Timeline Addition → Audio Recording → Text Overlays → Export
 ```
 
-## 🔧 Core Technologies Deep Dive
-
-### **Supabase Integration**
-- **Authentication**: Email/password, magic links, and OAuth providers
-- **Database**: Real-time PostgreSQL with automatic API generation
-- **Storage**: Scalable file storage with automatic CDN distribution
-- **Real-time**: Live updates for collaborative editing features
-
-### **OpenAI API Integration**
-- **Model**: GPT-4 for superior code generation quality
-- **Prompt Engineering**: Specialized prompts for mathematical concepts
-- **Token Optimization**: Efficient API usage with response caching
-- **Error Handling**: Robust fallback mechanisms for API failures
-
-### **FastAPI Backend**
-- **Async Operations**: Non-blocking video processing and generation
-- **Dependency Injection**: Clean, testable code architecture
-- **Automatic Documentation**: OpenAPI/Swagger integration
-- **CORS Configuration**: Secure cross-origin resource sharing
-
-### **Manim Engine**
-- **Python Integration**: Direct Python library execution
-- **Quality Control**: Multiple rendering quality options
-- **Format Support**: MP4, GIF, and PNG sequence output
-- **Performance Optimization**: Efficient rendering pipeline
-
-### **Pinecone Vector Database**
-- **High-Dimensional Vectors**: Store complex video embeddings
-- **Fast Similarity Search**: Sub-second search across millions of vectors
-- **Metadata Filtering**: Advanced filtering by video properties
-- **Scalable Infrastructure**: Auto-scaling based on usage
-
 ## 🚀 Complete Architecture
 
 PixelateAI follows this comprehensive workflow:
@@ -171,7 +141,7 @@ PixelateAI follows this comprehensive workflow:
 - **Pinecone** for vector search and video indexing
 - **CDN** for fast global video delivery
 
-## 🚀 Quick Start
+## 🚀 Quick Start (if locally)
 
 ### Prerequisites
 - Node.js 18+ 
@@ -207,31 +177,14 @@ npm run dev
 ```bash
 cd backend
 pip3 install -r requirements-minimal.txt
-# Kill existing backend
-lsof -ti:5001 | xargs kill -9
-
-# Run backend
-cd backend && source venv/bin/activate && python run.py
-```
-
-Create environment file:
-```bash
-# Copy the example environment file
-cp env.example .env
-
-# Edit .env with your actual API keys
-# OPENAI_API_KEY=your_openai_api_key_here
-# (Add other required environment variables)
-```
-
-Or set environment variables directly:
-```bash
-export OPENAI_API_KEY="your_openai_api_key_here"
 ```
 
 Start backend:
 ```bash
-python3 run.py
+# Kill existing backend
+lsof -ti:5001 | xargs kill -9
+# Run backend
+cd backend && source venv/bin/activate && python run.py
 ```
 
 ### 4. Access the Application
@@ -343,37 +296,6 @@ pixelateai/
 └── sample_animation.py   # Example output
 ```
 
-### Environment Variables
-
-**Frontend (.env.local)**:
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-PYTHON_BACKEND_URL=http://localhost:5001/simple-generate
-```
-
-**Backend (run.py)**:
-```python
-os.environ["OPENAI_API_KEY"] = "sk-..."
-os.environ["PINECONE_API_KEY"] = "pcsk_..."
-os.environ["PINECONE_INDEX_NAME"] = "manim-docs"
-```
-
-## 🚧 Known Limitations
-
-1. **Local Rendering Required**: Full video rendering requires local Manim installation
-2. **System Dependencies**: Manim needs Cairo, Pango, and FFmpeg
-3. **Processing Time**: Complex animations may take time to render
-4. **Code Validation**: Generated code may need manual review for complex concepts
-
-## 🛣️ Roadmap
-
-- [ ] **Cloud Rendering**: Server-side video generation
-- [ ] **Video Editor**: Built-in editing capabilities
-- [ ] **Template Library**: Pre-built animation templates
-- [ ] **Collaboration**: Share and remix animations
-- [ ] **Voice Generation**: AI-powered narration
-- [ ] **Interactive Animations**: Web-based interactive math
 
 ## 📚 Learning Resources
 
@@ -382,25 +304,6 @@ os.environ["PINECONE_INDEX_NAME"] = "manim-docs"
 - [OpenAI API Documentation](https://platform.openai.com/docs)
 - [Supabase Documentation](https://supabase.com/docs)
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **3Blue1Brown** for inspiring mathematical visualization
-- **Manim Community** for the animation engine
-- **OpenAI** for powerful language models
-- **Supabase** for backend infrastructure
-
 ---
 
-**Made with ❤️ for educators and students worldwide**
+**Made with ❤️ by techsas**
