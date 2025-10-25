@@ -87,9 +87,37 @@ def extract_python_code(text: str) -> str:
 
 
 def fix_manim_syntax(code: str) -> str:
-    """Fix old Manim syntax to new syntax."""
+    """Fix old Manim syntax to new syntax and remove forbidden elements."""
     
-    # Fix deprecated API calls first
+    # Remove forbidden external file dependencies
+    if 'ImageMobject' in code or 'SVGMobject' in code or 'VideoMobject' in code:
+        logger.warning("⚠️ Code contains forbidden file dependencies. Removing them...")
+        # Remove lines containing ImageMobject, SVGMobject, or VideoMobject
+        lines = code.split('\n')
+        cleaned_lines = []
+        skip_next_play = False
+        
+        for i, line in enumerate(lines):
+            # Skip lines with forbidden mobjects
+            if any(forbidden in line for forbidden in ['ImageMobject(', 'SVGMobject(', 'VideoMobject(']):
+                logger.warning(f"Removed line: {line.strip()}")
+                # Mark to skip next play/animation if it references this mobject
+                skip_next_play = True
+                continue
+            # Skip play/animation lines that follow forbidden mobject creation
+            elif skip_next_play and ('self.play' in line or 'self.add' in line):
+                # Check if this line might reference the forbidden mobject
+                skip_next_play = False
+                logger.warning(f"Skipped animation line: {line.strip()}")
+                continue
+            else:
+                cleaned_lines.append(line)
+                skip_next_play = False
+        
+        code = '\n'.join(cleaned_lines)
+        logger.info("✅ Cleaned code of external file dependencies")
+    
+    # Fix deprecated API calls
     api_replacements = {
         'ShowCreation': 'Create',
         'FadeInFromDown': 'FadeIn',
@@ -415,6 +443,13 @@ def generate_manim_code(prompt: str) -> str:
     - Use Text objects for all formulas with Unicode symbols (×, ÷, ±, ², ³, √, etc.)
     - Always use class name "Scene" that inherits from Scene
     - Focus on geometric shapes, simple animations, and text
+    
+    ABSOLUTELY FORBIDDEN:
+    - ImageMobject() - NO external image files
+    - SVGMobject() - NO external SVG files
+    - VideoMobject() - NO external video files
+    - Any file I/O operations or external dependencies
+    - ONLY use Manim's built-in geometric shapes and Text
     - Use these reliable animations: Create(), Write(), FadeIn(), FadeOut(), Transform()
     - Keep it simple and working
     
@@ -686,6 +721,16 @@ def generate_comprehensive_algorithmic_code(prompt: str) -> str:
             "• Explanatory text before or after code\n"
             "• Instructions on how to run the code\n"
             "• Just pure Python code starting with imports\n\n"
+            
+            "🚫 ABSOLUTELY FORBIDDEN:\n"
+            "• ImageMobject() - NO EXTERNAL IMAGE FILES\n"
+            "• SVGMobject() - NO EXTERNAL SVG FILES\n"
+            "• VideoMobject() - NO EXTERNAL VIDEO FILES\n"
+            "• Sound files or audio imports\n"
+            "• File I/O operations (open, read, write)\n"
+            "• Network requests or API calls\n"
+            "• External file dependencies of ANY kind\n"
+            "• ONLY use Manim's built-in shapes and Text objects\n\n"
             
             "🛡️ SAFE PROGRAMMING PRACTICES:\n"
             "• Always use len(array) to check array size before loops\n"
