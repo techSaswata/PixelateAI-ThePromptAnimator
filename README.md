@@ -2,6 +2,8 @@
 
 Transform complex mathematical concepts into beautiful, engaging animations using simple text prompts. No coding or animation experience required.
 
+![PixelateAI Demo](public/PixelateAI%20Demo.gif)
+
 ## 🏗️ System Architecture
 
 PixelateAI is built with a modern, scalable architecture that leverages cutting-edge AI and cloud technologies:
